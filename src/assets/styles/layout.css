@@ -1,0 +1,122 @@
+/* ─── Main container ─── */
+.container {
+  width: min(1100px, 92vw);
+  margin: 28px auto 48px;
+  display: grid;
+  gap: 22px;
+}
+
+/* ─── Hero section ─── */
+.hero {
+  width: min(860px, 92vw);
+  margin: 0 auto;
+  padding: 52px 20px 36px;
+  display: grid;
+  gap: 14px;
+  text-align: center;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.65rem, 3.5vw, 2.25rem);
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.025em;
+}
+
+.hero p {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.small {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ─── Grid layouts ─── */
+.hero-cards, .grid2, .kpi-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.hero-cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.grid2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* ─── KPI Cards ─── */
+.kpi-title {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.kpi-value {
+  font-size: 30px;
+  font-weight: 700;
+  margin-top: 6px;
+  color: var(--text);
+  letter-spacing: -0.03em;
+}
+
+/* ─── Footer ─── */
+.footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 20px 0;
+  border-top: 1px solid var(--stroke);
+  margin-top: 40px;
+}
+
+/* ═══ Responsive Layout ═══ */
+@media (max-width: 920px) {
+  .hero-cards {
+    grid-template-columns: 1fr;
+  }
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    width: 92vw;
+    margin: 16px auto 32px;
+    gap: 16px;
+  }
+  .hero {
+    padding: 28px 16px 20px;
+  }
+  .hero h1 {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .container {
+    width: 94vw;
+    margin: 12px auto 24px;
+  }
+}
