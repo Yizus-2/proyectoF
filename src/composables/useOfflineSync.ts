@@ -29,9 +29,7 @@ export function useOfflineSync() {
       let count = 0
       for (const item of items) {
         let table = ''
-        if (item.type === 'LEAK') table = 'leaks'
-        if (item.type === 'HYDRANT') table = 'hydrants'
-        if (item.type === 'PRESSURE') table = 'pressure_readings'
+        if (item.type === 'REPORT') table = 'reports'
         
         if (table) {
           const { error } = await supabase.from(table).insert(item.payload)

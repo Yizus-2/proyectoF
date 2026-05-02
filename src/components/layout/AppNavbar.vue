@@ -50,12 +50,9 @@ function closeMobile() {
       <!-- Navigation -->
       <nav class="navbar__nav" :class="{ 'is-open': mobileOpen }">
         <div class="navbar__links">
-          <RouterLink to="/" class="navbar__link" @click="closeMobile">Inicio</RouterLink>
-          <RouterLink to="/fugas/nueva" class="navbar__link" @click="closeMobile">Nueva Fuga</RouterLink>
-          <RouterLink to="/fugas" class="navbar__link" @click="closeMobile">Fugas</RouterLink>
-          <RouterLink to="/hidrantes" class="navbar__link" @click="closeMobile">Hidrantes</RouterLink>
-          <RouterLink to="/presiones/nueva" class="navbar__link" @click="closeMobile">Presiones</RouterLink>
-          <RouterLink to="/dashboard" class="navbar__link" @click="closeMobile">Dashboard</RouterLink>
+          <RouterLink to="/reportar" class="navbar__link" @click="closeMobile">Reportar</RouterLink>
+          <RouterLink v-if="auth.isOperator || auth.isAdmin" to="/gestion" class="navbar__link" @click="closeMobile">Gestión</RouterLink>
+          <RouterLink v-if="auth.isOperator || auth.isAdmin" to="/indicadores" class="navbar__link" @click="closeMobile">Indicadores</RouterLink>
         </div>
 
         <div class="navbar__actions">

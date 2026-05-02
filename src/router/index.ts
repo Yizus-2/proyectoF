@@ -4,13 +4,37 @@ import { useAuthStore } from '@/stores/auth'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
-    { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
-    { path: '/dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
-    { path: '/fugas', name: 'leaks-list', component: () => import('@/views/LeaksListView.vue') },
-    { path: '/fugas/nueva', name: 'leak-create', component: () => import('@/views/LeakCreateView.vue') },
-    { path: '/hidrantes', name: 'hydrants', component: () => import('@/views/HydrantsView.vue') },
-    { path: '/presiones/nueva', name: 'pressure-create', component: () => import('@/views/PressureCreateView.vue') }
+    { 
+      path: '/', 
+      redirect: '/reportar' 
+    },
+    { 
+      path: '/login', 
+      name: 'login', 
+      component: () => import('@/views/LoginView.vue') 
+    },
+    { 
+      path: '/reportar', 
+      name: 'report', 
+      component: () => import('@/views/ReportView.vue') 
+    },
+    { 
+      path: '/gestion', 
+      name: 'management', 
+      component: () => import('@/views/ManagementView.vue'),
+      meta: { requiresAuth: true, role: 'operator' } 
+    },
+    { 
+      path: '/indicadores', 
+      name: 'dashboard', 
+      component: () => import('@/views/DashboardKpiView.vue'),
+      meta: { requiresAuth: true, role: 'operator' }
+    },
+    {
+      path: '/encuesta/:code',
+      name: 'survey',
+      component: () => import('@/views/SurveyView.vue')
+    }
   ]
 })
 
@@ -27,11 +51,10 @@ router.beforeEach(async (to, _from, next) => {
 
   if (requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
-  } else if (requiresAuth && requiredRole === 'admin' && !auth.isAdmin) {
-    // If user is logged in but lacks admin role, send to home
-    next({ name: 'home' })
+  } else if (requiresAuth && requiredRole === 'operator' && !auth.isOperator) {
+    next({ name: 'report' })
   } else if (isLoginPage && auth.isAuthenticated) {
-    next({ name: 'home' })
+    next({ name: 'report' })
   } else {
     next()
   }

@@ -13,6 +13,8 @@ export const useAuthStore = defineStore('auth', () => {
   const userEmail = computed(() => user.value?.email)
   
   const isAdmin = computed(() => role.value === 'admin')
+  const isOperator = computed(() => role.value === 'operator' || role.value === 'admin')
+  const isCitizen = computed(() => role.value === 'citizen')
 
   async function initialize() {
     if (loading.value === false) return // Already initialized
@@ -63,6 +65,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     userEmail,
     isAdmin,
+    isOperator,
+    isCitizen,
     role,
     initialize,
     signOut
