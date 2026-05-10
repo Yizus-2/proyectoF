@@ -105,6 +105,48 @@ const canProceedStep2 = computed(() => !!form.value.category && form.value.descr
 function nextStep() { if (step.value < totalSteps) step.value++ }
 function prevStep() { if (step.value > 1) step.value-- }
 
+// Función nativa para comprimir imágenes antes de subir
+function compressImage(file: File, maxWidth = 1280, quality = 0.8): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = (event) => {
+      const img = new Image()
+      img.src = event.target?.result as string
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+
+        // Redimensionar manteniendo la proporción si excede el ancho máximo
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width)
+          width = maxWidth
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return resolve(file)
+
+        ctx.drawImage(img, 0, 0, width, height)
+
+        canvas.toBlob((blob) => {
+          if (!blob) return resolve(file)
+          const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          })
+          resolve(newFile)
+        }, 'image/jpeg', quality)
+      }
+      img.onerror = (e) => reject(e)
+    }
+    reader.onerror = (e) => reject(e)
+  })
+}
+
 async function submitReport() {
   if (!form.value.category || (!locationObtained.value && !form.value.address) || !form.value.zone_id) {
     errorMessage.value = 'Por favor completa todos los campos obligatorios.'
@@ -115,10 +157,13 @@ async function submitReport() {
   try {
     let photoPath = null
     if (form.value.photoFile && navigator.onLine) {
-      const ext = form.value.photoFile.name.split('.').pop()
+      // Comprimimos la imagen antes de subirla
+      const compressedFile = await compressImage(form.value.photoFile)
+      
+      const ext = compressedFile.name.split('.').pop() || 'jpg'
       const name = `${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`
       const filePath = `${name}`
-      const { error: upErr } = await supabase.storage.from('reports').upload(filePath, form.value.photoFile)
+      const { error: upErr } = await supabase.storage.from('reports').upload(filePath, compressedFile)
       if (upErr) console.warn('Photo upload error:', upErr.message)
       else photoPath = filePath
     }

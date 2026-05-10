@@ -51,6 +51,7 @@ function closeMobile() {
       <nav class="navbar__nav" :class="{ 'is-open': mobileOpen }">
         <div class="navbar__links">
           <RouterLink to="/reportar" class="navbar__link" @click="closeMobile">Reportar</RouterLink>
+          <RouterLink to="/rastrear" class="navbar__link" @click="closeMobile">Consultar</RouterLink>
           <RouterLink v-if="auth.isOperator || auth.isAdmin" to="/gestion" class="navbar__link" @click="closeMobile">Gestión</RouterLink>
           <RouterLink v-if="auth.isOperator || auth.isAdmin" to="/indicadores" class="navbar__link" @click="closeMobile">Indicadores</RouterLink>
         </div>

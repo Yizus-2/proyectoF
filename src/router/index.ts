@@ -6,7 +6,8 @@ const router = createRouter({
   routes: [
     { 
       path: '/', 
-      redirect: '/reportar' 
+      name: 'home',
+      component: () => import('@/views/HomeView.vue') 
     },
     { 
       path: '/login', 
@@ -17,6 +18,11 @@ const router = createRouter({
       path: '/reportar', 
       name: 'report', 
       component: () => import('@/views/ReportView.vue') 
+    },
+    { 
+      path: '/rastrear', 
+      name: 'track', 
+      component: () => import('@/views/TrackView.vue') 
     },
     { 
       path: '/gestion', 
@@ -54,7 +60,11 @@ router.beforeEach(async (to, _from, next) => {
   } else if (requiresAuth && requiredRole === 'operator' && !auth.isOperator) {
     next({ name: 'report' })
   } else if (isLoginPage && auth.isAuthenticated) {
-    next({ name: 'report' })
+    if (auth.isOperator || auth.isAdmin) {
+      next({ name: 'management' })
+    } else {
+      next({ name: 'home' })
+    }
   } else {
     next()
   }
