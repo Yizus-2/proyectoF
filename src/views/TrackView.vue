@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
 
 const trackingCode = ref('')
 const loading = ref(false)
@@ -13,6 +16,91 @@ const photoUrl = computed(() => {
   return supabase.storage.from('reports').getPublicUrl(reportData.value.photo_path).data.publicUrl
 })
 
+const evidenceUrl = computed(() => {
+  if (!reportData.value?.evidence_path) return null
+  return supabase.storage.from('reports').getPublicUrl(reportData.value.evidence_path).data.publicUrl
+})
+
+const manageForm = ref({
+  status: '',
+  evidenceFile: null as File | null,
+  evidencePreview: null as string | null
+})
+const isUpdating = ref(false)
+
+function onEvidenceSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files?.length) return
+  manageForm.value.evidenceFile = input.files[0]
+  manageForm.value.evidencePreview = URL.createObjectURL(input.files[0])
+}
+
+function compressImage(file: File, maxWidth = 1280, quality = 0.8): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = (event) => {
+      const img = new Image()
+      img.src = event.target?.result as string
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width)
+          width = maxWidth
+        }
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return resolve(file)
+        ctx.drawImage(img, 0, 0, width, height)
+        canvas.toBlob((blob) => {
+          if (!blob) return resolve(file)
+          resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: 'image/jpeg' }))
+        }, 'image/jpeg', quality)
+      }
+      img.onerror = (e) => reject(e)
+    }
+    reader.onerror = (e) => reject(e)
+  })
+}
+
+async function saveManagement() {
+  if (!reportData.value) return
+  isUpdating.value = true
+  try {
+    let evidencePath = undefined
+
+    if (manageForm.value.evidenceFile) {
+      const compressedFile = await compressImage(manageForm.value.evidenceFile)
+      const ext = compressedFile.name.split('.').pop() || 'jpg'
+      const filePath = `evidence/${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`
+      const { error: upErr } = await supabase.storage.from('reports').upload(filePath, compressedFile)
+      if (upErr) throw upErr
+      evidencePath = filePath
+    }
+
+    const payload: any = { status: manageForm.value.status }
+    if (evidencePath) payload.evidence_path = evidencePath
+
+    const { error } = await supabase
+      .from('reports')
+      .update(payload)
+      .eq('id', reportData.value.id)
+      
+    if (error) throw error
+    
+    alert('Reporte actualizado exitosamente')
+    searchReport()
+  } catch (e: any) {
+    console.error('Error updating status:', e)
+    alert('Error al guardar: ' + e.message)
+  } finally {
+    isUpdating.value = false
+  }
+}
+
 async function searchReport() {
   if (!trackingCode.value) return
   
@@ -24,7 +112,7 @@ async function searchReport() {
   try {
     const { data: report, error: reportErr } = await supabase
       .from('reports')
-      .select('id, tracking_code, status, address, category, created_at, priority, photo_path')
+      .select('id, tracking_code, status, address, category, created_at, priority, photo_path, evidence_path')
       .eq('tracking_code', trackingCode.value.trim().toUpperCase())
       .single()
 
@@ -33,6 +121,9 @@ async function searchReport() {
     }
     
     reportData.value = report
+    manageForm.value.status = report.status
+    manageForm.value.evidenceFile = null
+    manageForm.value.evidencePreview = null
 
     const { data: history, error: historyErr } = await supabase
       .from('report_history')
@@ -111,10 +202,45 @@ function getStatusColor(status: string) {
             <img :src="photoUrl" alt="Foto del reporte" class="report-photo" />
           </div>
 
+          <div v-if="evidenceUrl" class="photo-container evidence-container">
+            <p><strong>Evidencia de resolución (Operador):</strong></p>
+            <img :src="evidenceUrl" alt="Evidencia del operador" class="report-photo evidence-photo" />
+          </div>
+
           <div class="actions" v-if="['CERRADO', 'EVALUADO'].includes(reportData.status)">
             <RouterLink :to="`/encuesta/${reportData.tracking_code}`" class="btn-ghost">
               ⭐ Evaluar servicio
             </RouterLink>
+          </div>
+
+          <div v-if="auth.isAdmin || (auth.isOperator && !['RESUELTO', 'RECHAZADO', 'CERRADO', 'EVALUADO'].includes(reportData.status))" class="quick-manage-box">
+            <h3>🛠️ Gestión Rápida (Operador)</h3>
+            <form @submit.prevent="saveManagement" class="manage-form">
+              <div class="field">
+                <label>Cambiar Estado</label>
+                <select v-model="manageForm.status" required>
+                  <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
+                  <option value="ASIGNADO">ASIGNADO (Enviado a cuadrilla)</option>
+                  <option value="EN_PROGRESO">EN PROGRESO (Trabajando)</option>
+                  <option value="RESUELTO">RESUELTO (Finalizado)</option>
+                  <option v-if="auth.isAdmin" value="CERRADO">CERRADO (Archivado/Auditoria)</option>
+                  <option value="RECHAZADO">RECHAZADO (Falso/Duplicado)</option>
+                </select>
+              </div>
+
+              <div class="field" v-if="['EN_PROGRESO', 'RESUELTO', 'RECHAZADO'].includes(manageForm.status) && auth.isOperator">
+                <label>Evidencia fotográfica</label>
+                <label for="evidence-track" class="upload-area">
+                  <span v-if="!manageForm.evidencePreview">📷 Subir foto de respaldo</span>
+                  <img v-else :src="manageForm.evidencePreview" alt="preview" class="preview-img" />
+                </label>
+                <input id="evidence-track" type="file" accept="image/*" class="sr-only" @change="onEvidenceSelected" />
+              </div>
+
+              <button type="submit" class="btn-primary" :disabled="isUpdating">
+                {{ isUpdating ? 'Guardando...' : 'Actualizar Estado' }}
+              </button>
+            </form>
           </div>
         </div>
 
@@ -300,6 +426,17 @@ function getStatusColor(status: string) {
   box-shadow: var(--shadow-sm);
 }
 
+.evidence-container {
+  background: var(--bg-subtle);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--success);
+}
+
+.evidence-photo {
+  border-color: var(--success);
+}
+
 .actions {
   margin-top: 20px;
 }
@@ -403,6 +540,35 @@ function getStatusColor(status: string) {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Quick manage box */
+.quick-manage-box {
+  margin-top: 24px;
+  padding: 20px;
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  border: 1px dashed var(--primary);
+  border-radius: 12px;
+}
+.quick-manage-box h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.1rem;
+  color: var(--primary);
+}
+.manage-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field label { font-weight: 600; font-size: 0.9rem; }
+.field select { padding: 10px; border-radius: 8px; border: 1px solid var(--stroke); background: var(--card); color: var(--text); }
+.upload-area { display:flex; align-items:center; justify-content:center; min-height:80px; border:2px dashed var(--stroke); border-radius:12px; cursor:pointer; background:var(--bg-subtle); color:var(--muted); font-size: 0.9rem; font-weight: 600; overflow:hidden; transition: all 0.2s;}
+.upload-area:hover { border-color:var(--primary); color:var(--primary); }
+.preview-img { width:100%; height:120px; object-fit:cover; }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
+.btn-primary { padding: 12px; border-radius: 8px; border: none; background: var(--primary); color: white; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+.btn-primary:hover:not(:disabled) { box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 @media (max-width: 600px) {
   .search-box { flex-direction: column; }

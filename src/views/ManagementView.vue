@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth'
 import type { Report } from '@/types/report'
 import LeafletMap from '@/components/common/LeafletMap.vue'
 import L from 'leaflet'
@@ -14,6 +15,7 @@ const mapInstance = ref<any>(null)
 const markerLayer = ref<any>(null)
 const zones = ref<any[]>([])
 let realtimeChannel: any = null
+const auth = useAuthStore()
 
 async function loadZones() {
   const { data } = await supabase.from('zones').select('*')
@@ -25,9 +27,49 @@ const showModal = ref(false)
 const selectedReport = ref<Report | null>(null)
 const manageForm = ref({
   status: '',
-  work_order: ''
+  work_order: '',
+  evidenceFile: null as File | null,
+  evidencePreview: null as string | null
 })
 const isUpdating = ref(false)
+
+function onEvidenceSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files?.length) return
+  manageForm.value.evidenceFile = input.files[0]
+  manageForm.value.evidencePreview = URL.createObjectURL(input.files[0])
+}
+
+function compressImage(file: File, maxWidth = 1280, quality = 0.8): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = (event) => {
+      const img = new Image()
+      img.src = event.target?.result as string
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width)
+          width = maxWidth
+        }
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return resolve(file)
+        ctx.drawImage(img, 0, 0, width, height)
+        canvas.toBlob((blob) => {
+          if (!blob) return resolve(file)
+          resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), { type: 'image/jpeg' }))
+        }, 'image/jpeg', quality)
+      }
+      img.onerror = (e) => reject(e)
+    }
+    reader.onerror = (e) => reject(e)
+  })
+}
 
 const filteredReports = computed(() => {
   if (filterStatus.value === 'ACTIVOS') {
@@ -79,8 +121,9 @@ async function loadReports() {
   try {
     const { data, error } = await supabase
       .from('reports')
-      .select('*')
+      .select('id, tracking_code, status, address, category, created_at, priority, lat, lng, work_order')
       .order('created_at', { ascending: false })
+      .limit(100)
 
     if (error) {
       errorMsg.value = `Error al cargar reportes: ${error.message}`
@@ -102,6 +145,8 @@ function openManageModal(report: Report) {
   selectedReport.value = report
   manageForm.value.status = report.status
   manageForm.value.work_order = report.work_order || ''
+  manageForm.value.evidenceFile = null
+  manageForm.value.evidencePreview = null
   showModal.value = true
 }
 
@@ -114,12 +159,27 @@ async function saveManagement() {
   if (!selectedReport.value) return
   isUpdating.value = true
   try {
+    let evidencePath = undefined
+
+    // Si hay foto de evidencia, la comprimimos y la subimos
+    if (manageForm.value.evidenceFile) {
+      const compressedFile = await compressImage(manageForm.value.evidenceFile)
+      const ext = compressedFile.name.split('.').pop() || 'jpg'
+      const filePath = `evidence/${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`
+      const { error: upErr } = await supabase.storage.from('reports').upload(filePath, compressedFile)
+      if (upErr) throw upErr
+      evidencePath = filePath
+    }
+
+    const payload: any = { 
+      status: manageForm.value.status,
+      work_order: manageForm.value.work_order 
+    }
+    if (evidencePath) payload.evidence_path = evidencePath
+
     const { error } = await supabase
       .from('reports')
-      .update({ 
-        status: manageForm.value.status,
-        work_order: manageForm.value.work_order 
-      })
+      .update(payload)
       .eq('id', selectedReport.value.id)
       
     if (error) throw error
@@ -269,10 +329,18 @@ function getSlaStatus(report: Report) {
             </div>
             
             <div class="card-footer">
-              <button class="btn-manage" @click="openManageModal(report)">
+              <button 
+                v-if="auth.isAdmin || !['RESUELTO', 'CERRADO', 'RECHAZADO', 'EVALUADO'].includes(report.status)"
+                class="btn-manage" 
+                @click="openManageModal(report)"
+              >
                 Gestionar Reporte
                 <span class="status-indicator">{{ report.status }}</span>
               </button>
+              <div v-else class="btn-manage" style="cursor: not-allowed; opacity: 0.7; background: var(--bg-subtle);">
+                Reporte Bloqueado (Final)
+                <span class="status-indicator" style="background: transparent; color: var(--text);">{{ report.status }}</span>
+              </div>
             </div>
           </article>
         </div>
@@ -289,13 +357,22 @@ function getSlaStatus(report: Report) {
           <div class="field">
             <label>Estado actual</label>
             <select v-model="manageForm.status" required>
-              <option value="REPORTADO">REPORTADO (Nuevo)</option>
+              <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
               <option value="ASIGNADO">ASIGNADO (Enviado a cuadrilla)</option>
               <option value="EN_PROGRESO">EN PROGRESO (Trabajando)</option>
               <option value="RESUELTO">RESUELTO (Finalizado)</option>
-              <option value="CERRADO">CERRADO (Archivado/Auditoria)</option>
+              <option v-if="auth.isAdmin" value="CERRADO">CERRADO (Archivado/Auditoria)</option>
               <option value="RECHAZADO">RECHAZADO (Falso/Duplicado)</option>
             </select>
+          </div>
+
+          <div class="field" v-if="['EN_PROGRESO', 'RESUELTO', 'RECHAZADO'].includes(manageForm.status) && auth.isOperator">
+            <label>Evidencia fotográfica del operador</label>
+            <label for="evidence" class="upload-area">
+              <span v-if="!manageForm.evidencePreview">📷 Subir foto de respaldo</span>
+              <img v-else :src="manageForm.evidencePreview" alt="preview" class="preview-img" />
+            </label>
+            <input id="evidence" type="file" accept="image/*" class="sr-only" @change="onEvidenceSelected" />
           </div>
 
           <div class="field">
@@ -642,6 +719,11 @@ function getSlaStatus(report: Report) {
 .modal-subtitle { color: var(--muted); margin: 0 0 24px; font-size: 0.9rem; }
 
 .modal-form { display: flex; flex-direction: column; gap: 20px; }
+
+.upload-area { display:flex; align-items:center; justify-content:center; min-height:100px; border:2px dashed var(--stroke); border-radius:12px; cursor:pointer; background:var(--bg-subtle); font-weight:600; color:var(--muted); transition:all .2s; overflow:hidden; }
+.upload-area:hover { border-color:var(--primary); color:var(--primary); }
+.preview-img { width:100%; height:160px; object-fit:cover; }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 
 .field { display: flex; flex-direction: column; gap: 8px; }
 .field label { font-weight: 600; font-size: 0.95rem; }
