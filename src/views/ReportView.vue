@@ -186,8 +186,16 @@ async function submitReport() {
       await addToQueue({ type: 'REPORT', payload })
       successData.value = { tracking_code: 'Se asignará al sincronizar' }
     } else {
-      const { data, error } = await supabase.from('reports').insert(payload).select('tracking_code').single()
+      const { data, error } = await supabase.from('reports').insert(payload).select('id, tracking_code').single()
       if (error) throw error
+      
+      // Trigger automatic crew assignment
+      try {
+        await supabase.rpc('assign_crew_automatically', { p_report_id: data.id })
+      } catch (assignErr) {
+        console.warn('Automatic crew assignment failed on creation:', assignErr)
+      }
+
       successData.value = { tracking_code: data?.tracking_code || '—' }
     }
   } catch (error: any) {

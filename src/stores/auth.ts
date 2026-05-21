@@ -13,7 +13,8 @@ export const useAuthStore = defineStore('auth', () => {
   const userEmail = computed(() => user.value?.email)
   
   const isAdmin = computed(() => role.value === 'admin')
-  const isOperator = computed(() => role.value === 'operator' || role.value === 'admin')
+  const isSupervisor = computed(() => role.value === 'supervisor' || role.value === 'admin')
+  const isOperator = computed(() => role.value === 'operator' || role.value === 'supervisor' || role.value === 'admin')
   const isCitizen = computed(() => role.value === 'citizen')
 
   async function initialize() {
@@ -65,6 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     userEmail,
     isAdmin,
+    isSupervisor,
     isOperator,
     isCitizen,
     role,

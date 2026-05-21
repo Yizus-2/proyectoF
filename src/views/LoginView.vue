@@ -23,7 +23,7 @@ async function handleLogin() {
 
     if (error) throw error
     
-    const redirectPath = (route.query.redirect as string) || '/gestion'
+    const redirectPath = (route.query.redirect as string) || '/indicadores'
     router.push(redirectPath)
   } catch (err: any) {
     errorMsg.value = err.message || 'Error al iniciar sesión'
@@ -37,9 +37,10 @@ async function handleLogin() {
   <main class="login-layout">
     <!-- Left: Branded panel -->
     <aside class="login-panel">
+      <div class="login-panel__bg"></div>
       <div class="login-panel__content">
         <div class="login-panel__logo">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
           </svg>
         </div>
@@ -68,7 +69,7 @@ async function handleLogin() {
 
     <!-- Right: Form -->
     <section class="login-form-area">
-      <div class="login-card card">
+      <div class="login-card card animate-scale-in">
         <h3>Panel Operativo</h3>
         <p class="small" style="margin-bottom: 20px;">
           Acceso exclusivo para operadores y administradores de ESSMAR.
@@ -104,9 +105,10 @@ async function handleLogin() {
           <button 
             type="submit" 
             class="btn-primary" 
-            style="width: 100%; margin-top: 20px; padding: 11px 20px;" 
+            style="width: 100%; margin-top: 20px; padding: 12px 20px;" 
             :disabled="loading"
           >
+            <span v-if="loading" class="spinner-sm"></span>
             {{ loading ? 'Verificando...' : 'Acceder' }}
           </button>
         </form>
@@ -122,8 +124,8 @@ async function handleLogin() {
 <style scoped>
 .login-layout {
   display: grid;
-  grid-template-columns: 400px 1fr;
-  min-height: calc(100vh - 70px);
+  grid-template-columns: 380px 1fr;
+  min-height: calc(100vh - 64px);
 }
 
 /* ─── Left panel ─── */
@@ -133,19 +135,33 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 36px;
+  padding: 40px 32px;
   position: relative;
   overflow: hidden;
 }
-.login-panel::before {
+
+.login-panel__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.login-panel__bg::before {
   content: '';
   position: absolute;
-  top: -60%;
-  right: -40%;
+  top: -40%;
+  right: -30%;
   width: 80%;
-  height: 120%;
-  background: radial-gradient(ellipse, rgba(13, 148, 136, 0.12) 0%, transparent 70%);
-  pointer-events: none;
+  height: 100%;
+  background: radial-gradient(ellipse, rgba(12, 154, 141, 0.1) 0%, transparent 65%);
+}
+.login-panel__bg::after {
+  content: '';
+  position: absolute;
+  bottom: -30%;
+  left: -20%;
+  width: 60%;
+  height: 80%;
+  background: radial-gradient(ellipse, rgba(92, 184, 245, 0.06) 0%, transparent 65%);
 }
 
 .login-panel__content {
@@ -154,20 +170,21 @@ async function handleLogin() {
 }
 
 .login-panel__logo {
-  width: 52px;
-  height: 52px;
+  width: 50px;
+  height: 50px;
   border-radius: 14px;
   display: grid;
   place-items: center;
-  background: var(--accent);
+  background: var(--gradient-accent);
   color: white;
   margin-bottom: 20px;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35);
+  box-shadow: 0 4px 18px rgba(12, 154, 141, 0.35);
 }
 
 .login-panel h2 {
-  font-size: 1.4rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
   color: white;
   margin-bottom: 6px;
   letter-spacing: 0.04em;
@@ -175,7 +192,7 @@ async function handleLogin() {
 
 .login-panel__subtitle {
   font-size: 13px;
-  opacity: 0.5;
+  opacity: 0.45;
   line-height: 1.5;
   margin-bottom: 32px;
   color: var(--nav-text) !important;
@@ -183,7 +200,7 @@ async function handleLogin() {
 
 .login-panel__features {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .login-panel__feature {
@@ -191,9 +208,11 @@ async function handleLogin() {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  opacity: 0.7;
+  opacity: 0.65;
   color: var(--nav-text);
+  transition: opacity var(--transition);
 }
+.login-panel__feature:hover { opacity: 0.9; }
 .login-panel__feature svg {
   color: var(--accent-light);
   flex-shrink: 0;
@@ -205,7 +224,6 @@ async function handleLogin() {
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  background: var(--bg);
 }
 
 .login-card {
@@ -215,6 +233,7 @@ async function handleLogin() {
 
 .login-card h3 {
   justify-content: flex-start;
+  font-family: var(--font-display);
 }
 
 .login-footer {
@@ -224,15 +243,6 @@ async function handleLogin() {
   color: var(--muted);
 }
 
-.link-accent {
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 600;
-}
-.link-accent:hover {
-  text-decoration: underline;
-}
-
 /* ─── Responsive ─── */
 @media (max-width: 860px) {
   .login-layout {
@@ -240,7 +250,7 @@ async function handleLogin() {
   }
 
   .login-panel {
-    padding: 28px 24px;
+    padding: 24px 20px;
   }
 
   .login-panel__features {
@@ -248,7 +258,7 @@ async function handleLogin() {
   }
 
   .login-panel h2 {
-    font-size: 1.2rem;
+    font-size: 1.15rem;
   }
 
   .login-panel__subtitle {

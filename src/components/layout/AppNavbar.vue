@@ -52,7 +52,6 @@ function closeMobile() {
         <div class="navbar__links">
           <RouterLink to="/reportar" class="navbar__link" @click="closeMobile">Reportar</RouterLink>
           <RouterLink to="/rastrear" class="navbar__link" @click="closeMobile">Consultar</RouterLink>
-          <RouterLink v-if="auth.isOperator || auth.isAdmin" to="/gestion" class="navbar__link" @click="closeMobile">Gestión</RouterLink>
           <RouterLink v-if="auth.isOperator || auth.isAdmin" to="/indicadores" class="navbar__link" @click="closeMobile">Indicadores</RouterLink>
         </div>
 
@@ -87,11 +86,11 @@ function closeMobile() {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: color-mix(in srgb, var(--nav-bg) 75%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 24px -6px rgba(0, 0, 0, 0.25);
+  background: color-mix(in srgb, var(--nav-bg) 82%, transparent);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.08), 0 4px 20px -4px rgba(0, 0, 0, 0.2);
   transition: background-color var(--transition-slow);
 }
 
@@ -102,27 +101,36 @@ function closeMobile() {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  height: 70px;
+  height: 64px;
 }
 
 /* ─── Brand ─── */
 .navbar__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   text-decoration: none;
   color: var(--nav-text);
   flex-shrink: 0;
+  transition: opacity var(--transition);
+}
+.navbar__brand:hover {
+  opacity: 0.9;
 }
 
 .navbar__logo {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
-  background: var(--accent);
+  background: var(--gradient-accent);
   color: white;
+  box-shadow: 0 2px 12px rgba(12, 154, 141, 0.35);
+  transition: transform 0.3s var(--ease-spring);
+}
+.navbar__brand:hover .navbar__logo {
+  transform: scale(1.06) rotate(-2deg);
 }
 
 .navbar__brand-text {
@@ -131,57 +139,60 @@ function closeMobile() {
   line-height: 1.1;
 }
 .navbar__brand-name {
+  font-family: var(--font-display);
   font-weight: 800;
-  font-size: 17px;
+  font-size: 16px;
   letter-spacing: 0.06em;
 }
 .navbar__brand-sub {
+  font-family: var(--font-display);
   font-weight: 500;
-  font-size: 11px;
-  opacity: 0.6;
-  letter-spacing: 0.1em;
+  font-size: 10.5px;
+  opacity: 0.5;
+  letter-spacing: 0.12em;
 }
 
 /* ─── Nav ─── */
 .navbar__nav {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .navbar__links {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
 }
 
 .navbar__link {
   position: relative;
-  padding: 8px 16px;
+  padding: 7px 15px;
   color: var(--nav-text);
-  opacity: 0.65;
+  opacity: 0.6;
   text-decoration: none;
-  font-size: 14.5px;
-  font-weight: 500;
-  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-full);
   transition: all var(--transition);
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 .navbar__link:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
 }
 .navbar__link.router-link-exact-active {
   opacity: 1;
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent-light);
 }
 .navbar__link.router-link-exact-active::after {
   content: '';
   position: absolute;
-  bottom: 0px;
-  left: 20px;
-  right: 20px;
+  bottom: -1px;
+  left: 18px;
+  right: 18px;
   height: 2px;
   background: var(--accent-light);
   border-radius: 2px 2px 0 0;
@@ -191,16 +202,16 @@ function closeMobile() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: 12px;
-  padding-left: 12px;
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  margin-left: 14px;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ─── User ─── */
 .navbar__user {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--nav-text);
-  opacity: 0.5;
+  opacity: 0.45;
   max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -209,31 +220,32 @@ function closeMobile() {
 
 /* ─── Buttons ─── */
 .navbar__btn {
-  padding: 8px 18px;
+  padding: 7px 18px;
   border-radius: var(--radius-xs);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   transition: all var(--transition);
   border: none;
-  font-family: inherit;
+  font-family: var(--font-body);
   white-space: nowrap;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 .navbar__btn--solid {
-  background: var(--accent);
+  background: var(--gradient-accent);
   color: white;
+  box-shadow: 0 2px 10px rgba(12, 154, 141, 0.3);
 }
 .navbar__btn--solid:hover {
-  background: var(--accent-light);
-  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.3);
+  box-shadow: 0 4px 16px rgba(12, 154, 141, 0.4);
+  transform: translateY(-1px);
 }
 .navbar__btn--outline {
   background: transparent;
   color: var(--nav-text);
-  opacity: 0.7;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  opacity: 0.65;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .navbar__btn--outline:hover {
   opacity: 1;
@@ -246,18 +258,19 @@ function closeMobile() {
   height: 32px;
   border-radius: var(--radius-xs);
   border: none;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--nav-text);
   cursor: pointer;
   display: grid;
   place-items: center;
   transition: all var(--transition);
   flex-shrink: 0;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 .navbar__theme:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
   opacity: 1;
+  transform: rotate(15deg);
 }
 
 /* ─── Hamburger ─── */
@@ -276,7 +289,7 @@ function closeMobile() {
   transition: background var(--transition);
 }
 .navbar__hamburger:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.06);
 }
 .navbar__hamburger span {
   display: block;
@@ -307,31 +320,32 @@ function closeMobile() {
     display: block;
     position: fixed;
     inset: 0;
-    top: 70px;
+    top: 64px;
     background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
     z-index: 98;
-    animation: overlayIn 0.2s ease;
+    animation: overlayIn 0.25s ease;
   }
 
   .navbar__nav {
     position: fixed;
-    top: 70px;
+    top: 64px;
     right: 0;
     bottom: 0;
     width: min(280px, 80vw);
     flex-direction: column;
     align-items: stretch;
     gap: 4px;
-    padding: 14px;
-    background: color-mix(in srgb, var(--nav-bg) 90%, transparent);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    padding: 16px;
+    background: color-mix(in srgb, var(--nav-bg) 94%, transparent);
+    backdrop-filter: blur(24px) saturate(1.8);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8);
     transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.35s var(--ease-out-expo);
     overflow-y: auto;
     z-index: 99;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.2);
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.25);
   }
   .navbar__nav.is-open { transform: translateX(0); }
 
@@ -341,13 +355,13 @@ function closeMobile() {
   }
 
   .navbar__link {
-    padding: 11px 14px;
+    padding: 12px 14px;
     font-size: 14px;
     border-radius: var(--radius-sm);
   }
   .navbar__link.router-link-exact-active::after { display: none; }
   .navbar__link.router-link-exact-active {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .navbar__actions {
@@ -355,7 +369,7 @@ function closeMobile() {
     padding-left: 0;
     border-left: none;
     flex-direction: column;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     margin-top: 8px;
     padding-top: 12px;
     gap: 8px;
@@ -367,7 +381,7 @@ function closeMobile() {
   }
 
   .navbar__btn {
-    padding: 11px 14px;
+    padding: 12px 14px;
     text-align: center;
     width: 100%;
     font-size: 13.5px;

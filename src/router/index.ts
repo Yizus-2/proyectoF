@@ -25,15 +25,9 @@ const router = createRouter({
       component: () => import('@/views/TrackView.vue') 
     },
     { 
-      path: '/gestion', 
-      name: 'management', 
-      component: () => import('@/views/ManagementView.vue'),
-      meta: { requiresAuth: true, role: 'operator' } 
-    },
-    { 
       path: '/indicadores', 
       name: 'dashboard', 
-      component: () => import('@/views/DashboardKpiView.vue'),
+      component: () => import('@/views/indicadores/Dashboard.vue'),
       meta: { requiresAuth: true, role: 'operator' }
     },
     {
@@ -61,7 +55,7 @@ router.beforeEach(async (to, _from, next) => {
     next({ name: 'report' })
   } else if (isLoginPage && auth.isAuthenticated) {
     if (auth.isOperator || auth.isAdmin) {
-      next({ name: 'management' })
+      next({ name: 'dashboard' })
     } else {
       next({ name: 'home' })
     }

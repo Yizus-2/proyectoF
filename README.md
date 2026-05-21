@@ -112,21 +112,23 @@ npm run build
 
 ## 📊 Módulo de Indicadores (Dashboard)
 
-El apartado de **Indicadores** centraliza toda la gestión operativa y las métricas del sistema.
+El apartado de **Indicadores** centraliza toda la gestión operativa y las métricas del sistema, alojando además la Gestión de Operaciones.
 
-### KPIs Principales
-- **Reportes Activos:** Incidencias reportadas, aún sin asignar.
-- **Reportes en Progreso:** Asignados a cuadrilla, en ejecución.
-- **Reportes Resueltos:** Atendidos y verificados por supervisor.
-- **Tiempo Promedio de Respuesta:** Minutos promedio desde reporte a asignación.
+### KPIs Principales (Actualizados 2026)
+- **Tiempo Promedio de Atención:** Horas promedio desde el reporte hasta el cierre de la atención.
+- **Cumplimiento de SLA:** Porcentaje de reportes resueltos dentro del tiempo objetivo (A tiempo vs Vencido).
+- **Reportes por Zona:** Total de daños y cuellos de botella geográficos.
+- **Tasa de Reincidencia:** Porcentaje de reportes catalogados como recurrentes.
+- **Adopción Digital:** Porcentaje de reportes ingresados vía App Móvil y Web vs Canales Tradicionales (Teléfono, Presencial).
 
 ### Gráficas
 | Gráfica | Descripción |
 |---------|-------------|
-| **Cumplimiento de Tiempos de Atención** *(antes SLA)* | Porcentaje de reportes atendidos dentro del tiempo establecido según nivel de riesgo. |
-| **Canales de Reporte** | Distribución completa de reportes por medio de recepción. |
-| **Distribución por Nivel de Riesgo** | Cantidad de reportes clasificados por escala de riesgo. |
-| **Gestión de Operaciones** *(movido desde módulo Gestión)* | Métricas de eficiencia de cuadrillas, tiempos de ciclo, backlog. |
+| **Tendencia de Reportes (7 días)** | Gráfico de línea que muestra el volumen de ingresos temporales. |
+| **Cumplimiento SLA** | Gráfico de dona (A tiempo vs Riesgo vs Vencido). |
+| **Canales de Reporte (Barras Horizontales)** | Distribución completa de reportes por medio de recepción, priorizando lectura visual. |
+| **Eficiencia por Zona** | Distribución de cargas y tiempos de respuesta geográficos. |
+| **Gestión de Operaciones** *(pestaña integrada)* | Interfaz de asignación automática de cuadrillas y verificación. |
 
 ### Canales de Reporte Completos
 La gráfica de Canales de Reporte incluye todos los medios disponibles:
@@ -447,21 +449,14 @@ CREATE TABLE verificaciones (
 );
 
 -- ============================================================
--- 7. INDICADORES / MÉTRICAS (vista materializada para dashboard)
+-- 7. VISTAS ANALÍTICAS (Métricas de Dashboard)
 -- ============================================================
-CREATE TABLE metricas_diarias (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  fecha DATE NOT NULL DEFAULT CURRENT_DATE,
-  reportes_activos INTEGER DEFAULT 0,
-  reportes_en_progreso INTEGER DEFAULT 0,
-  reportes_resueltos INTEGER DEFAULT 0,
-  tiempo_promedio_respuesta INTEGER, -- en minutos
-  cumplimiento_critico DECIMAL(5,2), -- porcentaje
-  cumplimiento_alto DECIMAL(5,2),
-  cumplimiento_medio DECIMAL(5,2),
-  cumplimiento_bajo DECIMAL(5,2),
-  UNIQUE(fecha)
-);
+-- Nota: Las vistas están definidas en la migración `20260521000000_kpi_views.sql`
+-- Incluyen:
+-- * vw_kpi_avg_resolution_time
+-- * vw_kpi_sla_compliance
+-- * vw_kpi_digital_adoption
+-- * vw_kpi_recurrence_rate
 
 -- ============================================================
 -- FUNCIONES AUXILIARES
