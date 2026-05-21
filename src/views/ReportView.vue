@@ -70,10 +70,11 @@ function handleMapReady(m: any) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         updateLocation(pos.coords.latitude, pos.coords.longitude)
-        m.setView([pos.coords.latitude, pos.coords.longitude], 15)
+        m.setView([pos.coords.latitude, pos.coords.longitude], 17)
         locationObtained.value = true
       },
-      () => console.warn('No se pudo obtener ubicación')
+      (err) => console.warn('No se pudo obtener ubicación con alta precisión', err),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     )
   }
   m.on('click', (e: any) => {
@@ -84,11 +85,15 @@ function handleMapReady(m: any) {
 
 function useMyLocation() {
   if (!navigator.geolocation) return
-  navigator.geolocation.getCurrentPosition((pos) => {
-    updateLocation(pos.coords.latitude, pos.coords.longitude)
-    mapInstance.value?.setView([pos.coords.latitude, pos.coords.longitude], 16)
-    locationObtained.value = true
-  })
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      updateLocation(pos.coords.latitude, pos.coords.longitude)
+      mapInstance.value?.setView([pos.coords.latitude, pos.coords.longitude], 17)
+      locationObtained.value = true
+    },
+    (err) => console.warn('No se pudo obtener ubicación con alta precisión', err),
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  )
 }
 
 function updateLocation(lat: number, lng: number) {
@@ -268,6 +273,10 @@ function resetForm() {
             <label for="addr">Dirección o referencia</label>
             <input id="addr" v-model="form.address" type="text" placeholder="Ej: Calle 12 #3-45, frente a la panadería" />
           </div>
+          <div class="field" v-if="form.lat && form.lng">
+            <label>Coordenadas GPS (Alta Precisión)</label>
+            <input type="text" :value="`${form.lat.toFixed(6)}, ${form.lng.toFixed(6)}`" readonly class="readonly-input" />
+          </div>
           <div class="field">
             <label for="zone">Zona / Sector</label>
             <select id="zone" v-model="form.zone_id">
@@ -397,6 +406,7 @@ function resetForm() {
 .field input, .field textarea, .field select { padding:12px 14px; border-radius:10px; border:1px solid var(--stroke); background:var(--bg-subtle); color:var(--text); font-size:.95rem; font-family:inherit; transition:border .2s; }
 .field input:focus, .field textarea:focus, .field select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent); }
 .fields-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.readonly-input { background:var(--bg-body) !important; color:var(--primary) !important; font-family:monospace; font-weight:700; cursor:default; }
 
 /* Photo */
 .upload-area { display:flex; align-items:center; justify-content:center; min-height:100px; border:2px dashed var(--stroke); border-radius:12px; cursor:pointer; background:var(--bg-subtle); font-weight:600; color:var(--muted); transition:all .2s; overflow:hidden; }
