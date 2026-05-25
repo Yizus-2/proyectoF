@@ -112,11 +112,11 @@ async function submitEvidence() {
     if (dbError) throw dbError
 
     // 4. Update Report Status based on current state
-    const nextStatus = props.currentStatus === 'ASIGNADO' ? 'EN_PROGRESO' : 'VERIFICACION_SUPERVISOR'
+    const nextStatus = props.currentStatus === 'ASIGNADO' ? 'EN_PROGRESO' : 'RESUELTO'
     const updatePayload: any = { status: nextStatus }
     
-    // Si es el final, guardamos el path, si es el inicio, lo guardamos en photo_path si no había.
-    if (nextStatus === 'VERIFICACION_SUPERVISOR') {
+    // Si es el final, guardamos el path
+    if (nextStatus === 'RESUELTO') {
       updatePayload.evidence_path = storagePath
     }
 

@@ -21,7 +21,7 @@ watch(
       pendingReports.value = []
       return
     }
-    const supervisorReports = newReports.filter(r => r.status === 'VERIFICACION_SUPERVISOR')
+    const supervisorReports = newReports.filter(r => r.status === 'RESUELTO')
     
     loading.value = true
     try {
@@ -78,11 +78,11 @@ async function verify(reportId: number, decision: 'APROBADO' | 'RECHAZADO' | 'RE
     if (dbError) throw dbError
 
     // 2. Map decision to report status
-    let nextStatus = 'RESUELTO'
+    let nextStatus = 'CERRADO'
     if (decision === 'RECHAZADO') {
       nextStatus = 'RECHAZADO'
     } else if (decision === 'REGLAMENTO_PENDIENTE') {
-      nextStatus = 'EVIDENCIA_PENDIENTE'
+      nextStatus = 'EN_PROGRESO'
     }
 
     // 3. Update Report Status
