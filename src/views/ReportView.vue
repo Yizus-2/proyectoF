@@ -372,8 +372,8 @@ function resetForm() {
             </div>
             <small class="hint">Escribe aquí y presiona Buscar para mover el mapa</small>
           </div>
-          <div class="field">
-            <label for="sector">Sector (Autocompletado)</label>
+          <div class="field" v-if="locationObtained">
+            <label for="sector">Sector / Barrio</label>
             <input id="sector" v-model="form.sector" type="text" placeholder="Ej: Pescaito, El Rodadero, etc." />
           </div>
           <div class="field" v-if="form.lat && form.lng">
