@@ -93,8 +93,8 @@ const auth = useAuthStore()
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(12, 154, 141, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 50% at 85% 80%, rgba(26, 53, 84, 0.1) 0%, transparent 60%);
+    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(45, 27, 105, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 50% at 85% 80%, rgba(6, 182, 160, 0.09) 0%, transparent 60%);
 }
 .home-ambient::before {
   content: '';

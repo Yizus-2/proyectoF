@@ -43,12 +43,12 @@ body::after {
   transition: opacity 0.6s var(--ease-out-expo);
 }
 
-/* Light mode — soft teal/navy ambient glow */
+/* Light mode — soft indigo/emerald ambient glow */
 body::before {
   background-image: 
-    radial-gradient(ellipse 100% 70% at 5% -10%, rgba(12, 154, 141, 0.09) 0%, transparent 55%),
-    radial-gradient(ellipse 80% 60% at 90% 110%, rgba(26, 53, 84, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 50% at 50% 50%, rgba(12, 154, 141, 0.04) 0%, transparent 55%);
+    radial-gradient(ellipse 100% 70% at 5% -10%, rgba(45, 27, 105, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 60% at 90% 110%, rgba(6, 182, 160, 0.1) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 50% 50%, rgba(45, 27, 105, 0.04) 0%, transparent 55%);
   opacity: 1;
 }
 .dark body::before,
@@ -57,8 +57,8 @@ body.dark::before { opacity: 0; }
 /* Dark mode — deep jewel tones */
 body::after {
   background-image: 
-    radial-gradient(ellipse 100% 70% at 5% -10%, rgba(47, 216, 197, 0.06) 0%, transparent 55%),
-    radial-gradient(ellipse 80% 60% at 90% 110%, rgba(92, 184, 245, 0.08) 0%, transparent 55%);
+    radial-gradient(ellipse 100% 70% at 5% -10%, rgba(52, 232, 208, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 60% at 90% 110%, rgba(167, 139, 250, 0.08) 0%, transparent 55%);
   opacity: 0;
 }
 .dark body::after,
@@ -142,8 +142,8 @@ p {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(12, 154, 141, 0.25); }
-  50%      { box-shadow: 0 0 0 8px rgba(12, 154, 141, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 160, 0.25); }
+  50%      { box-shadow: 0 0 0 8px rgba(6, 182, 160, 0); }
 }
 
 @keyframes spin {

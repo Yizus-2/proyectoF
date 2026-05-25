@@ -40,8 +40,13 @@ async function handleLogin() {
       <div class="login-panel__bg"></div>
       <div class="login-panel__content">
         <div class="login-panel__logo">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" stroke-width="2.2" fill="rgba(255,255,255,0.15)"/>
+            <path d="M8.5 16.5c0-2.5 3.5-5 3.5-5s3.5 2.5 3.5 5" stroke-width="1.6" opacity="0.7"/>
+            <circle cx="12" cy="18.5" r="0" fill="currentColor" opacity="0">
+              <animate attributeName="r" values="0;2.2;0" dur="3s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="0.6;0;0.6" dur="3s" repeatCount="indefinite"/>
+            </circle>
           </svg>
         </div>
         <h2>ESSMAR</h2>
@@ -152,7 +157,7 @@ async function handleLogin() {
   right: -30%;
   width: 80%;
   height: 100%;
-  background: radial-gradient(ellipse, rgba(12, 154, 141, 0.1) 0%, transparent 65%);
+  background: radial-gradient(ellipse, rgba(6, 182, 160, 0.12) 0%, transparent 65%);
 }
 .login-panel__bg::after {
   content: '';
@@ -161,7 +166,7 @@ async function handleLogin() {
   left: -20%;
   width: 60%;
   height: 80%;
-  background: radial-gradient(ellipse, rgba(92, 184, 245, 0.06) 0%, transparent 65%);
+  background: radial-gradient(ellipse, rgba(167, 139, 250, 0.08) 0%, transparent 65%);
 }
 
 .login-panel__content {
@@ -170,15 +175,15 @@ async function handleLogin() {
 }
 
 .login-panel__logo {
-  width: 50px;
-  height: 50px;
-  border-radius: 14px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   background: var(--gradient-accent);
   color: white;
   margin-bottom: 20px;
-  box-shadow: 0 4px 18px rgba(12, 154, 141, 0.35);
+  box-shadow: 0 4px 20px rgba(6, 182, 160, 0.4);
 }
 
 .login-panel h2 {

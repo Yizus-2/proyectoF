@@ -25,8 +25,13 @@ function closeMobile() {
       <!-- Brand -->
       <RouterLink to="/" class="navbar__brand" @click="closeMobile">
         <div class="navbar__logo">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" stroke-width="2.2" fill="rgba(255,255,255,0.15)"/>
+            <path d="M8.5 16.5c0-2.5 3.5-5 3.5-5s3.5 2.5 3.5 5" stroke-width="1.6" opacity="0.7"/>
+            <circle cx="12" cy="18.5" r="0" fill="currentColor" opacity="0">
+              <animate attributeName="r" values="0;2.2;0" dur="3s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="0.6;0;0.6" dur="3s" repeatCount="indefinite"/>
+            </circle>
           </svg>
         </div>
         <div class="navbar__brand-text">
@@ -119,14 +124,14 @@ function closeMobile() {
 }
 
 .navbar__logo {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
   display: grid;
   place-items: center;
   background: var(--gradient-accent);
   color: white;
-  box-shadow: 0 2px 12px rgba(12, 154, 141, 0.35);
+  box-shadow: 0 2px 14px rgba(6, 182, 160, 0.4);
   transition: transform 0.3s var(--ease-spring);
 }
 .navbar__brand:hover .navbar__logo {
@@ -141,14 +146,14 @@ function closeMobile() {
 .navbar__brand-name {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 16px;
+  font-size: 18px;
   letter-spacing: 0.06em;
 }
 .navbar__brand-sub {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: 10.5px;
-  opacity: 0.5;
+  font-size: 12px;
+  opacity: 0.55;
   letter-spacing: 0.12em;
 }
 
@@ -235,10 +240,10 @@ function closeMobile() {
 .navbar__btn--solid {
   background: var(--gradient-accent);
   color: white;
-  box-shadow: 0 2px 10px rgba(12, 154, 141, 0.3);
+  box-shadow: 0 2px 10px rgba(6, 182, 160, 0.35);
 }
 .navbar__btn--solid:hover {
-  box-shadow: 0 4px 16px rgba(12, 154, 141, 0.4);
+  box-shadow: 0 4px 16px rgba(6, 182, 160, 0.45);
   transform: translateY(-1px);
 }
 .navbar__btn--outline {
