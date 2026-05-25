@@ -344,11 +344,20 @@ function resetForm() {
         <h2>¡Reporte Enviado!</h2>
         <p>Tu reporte fue recibido exitosamente.</p>
         <div class="tracking-box">
-          <span class="tracking-label">Código de seguimiento</span>
+          <span class="tracking-label">Código PQR Permanente</span>
           <span class="tracking-code">{{ successData.tracking_code }}</span>
         </div>
-        <p class="tracking-hint">Guarda este código para consultar el estado de tu reporte.</p>
-        <button class="btn-main" @click="resetForm">Enviar otro reporte</button>
+        
+        <div class="user-action-guide">
+          <h4>¿Qué puedes hacer ahora?</h4>
+          <ul>
+            <li><strong>Consultar estado:</strong> Usa este código PQR en la sección "Consultar Reporte" para ver actualizaciones en tiempo real y la cuadrilla asignada.</li>
+            <li><strong>Valor legal:</strong> Este número no caduca y sirve como comprobante ante cualquier entidad regulatoria.</li>
+            <li><strong>Asignación:</strong> El sistema está asignando automáticamente tu caso a la cuadrilla más óptima.</li>
+          </ul>
+        </div>
+
+        <button class="btn-main mt-4" @click="resetForm">Enviar otro reporte</button>
       </div>
     </div>
 
@@ -668,6 +677,31 @@ function resetForm() {
 .tracking-label { display:block; font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; margin-bottom:6px; }
 .tracking-code { font-size:1.4rem; font-weight:800; font-family:monospace; color:var(--primary); letter-spacing:.04em; }
 .tracking-hint { font-size:.85rem; color:var(--muted); margin:0 0 24px; }
+
+.user-action-guide {
+  text-align: left;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px dashed var(--primary);
+  padding: 16px;
+  border-radius: 12px;
+  margin: 20px 0;
+}
+.user-action-guide h4 {
+  margin: 0 0 12px 0;
+  color: var(--primary);
+  font-size: 1.05rem;
+}
+.user-action-guide ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mt-4 { margin-top: 16px; }
 
 /* Alert */
 .alert-error { padding:12px 16px; border-radius:10px; background:rgba(239,68,68,.1); color:#ef4444; border:1px solid rgba(239,68,68,.2); font-weight:600; font-size:.9rem; margin-bottom:12px; }

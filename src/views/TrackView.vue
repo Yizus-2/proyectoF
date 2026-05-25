@@ -11,6 +11,12 @@ const errorMsg = ref('')
 const reportData = ref<any>(null)
 const reportHistory = ref<any[]>([])
 
+const resolvedDate = computed(() => {
+  if (!reportData.value || !['RESUELTO', 'CERRADO', 'EVALUADO'].includes(reportData.value.status)) return null
+  const ev = reportHistory.value.find(e => ['RESUELTO', 'CERRADO', 'EVALUADO'].includes(e.new_status))
+  return ev ? ev.created_at : null
+})
+
 const photoUrl = computed(() => {
   if (!reportData.value?.photo_path) return null
   return supabase.storage.from('reports').getPublicUrl(reportData.value.photo_path).data.publicUrl
@@ -112,7 +118,7 @@ async function searchReport() {
   try {
     const { data: report, error: reportErr } = await supabase
       .from('reports')
-      .select('id, tracking_code, status, address, category, created_at, priority, photo_path, evidence_path')
+      .select('id, tracking_code, status, address, category, created_at, priority, photo_path, evidence_path, work_order')
       .eq('tracking_code', trackingCode.value.trim().toUpperCase())
       .single()
 
@@ -194,8 +200,24 @@ function getStatusColor(status: string) {
         </div>
 
         <div class="result-body">
+          <!-- Guía Ciudadana -->
+          <div class="user-guide-box">
+            <h4>📖 Guía Ciudadana PQR</h4>
+            <p>Este código (<strong>{{ reportData.tracking_code }}</strong>) es tu <strong>PQR permanente</strong>. No caduca y sirve como comprobante legal de tu solicitud. Úsalo para dar seguimiento continuo hasta la resolución de tu caso.</p>
+          </div>
+
           <p class="address"><strong>Ubicación:</strong> {{ reportData.address }}</p>
           <p class="date"><strong>Reportado el:</strong> {{ formatDate(reportData.created_at) }}</p>
+          
+          <div v-if="reportData.work_order" class="crew-box">
+            <strong>👷 Cuadrilla Asignada:</strong> {{ reportData.work_order }}
+          </div>
+
+          <!-- Notificación Legal -->
+          <div v-if="resolvedDate" class="legal-resolution-box">
+            <h4>⚖️ Notificación de Resolución</h4>
+            <p>De acuerdo con el marco legal vigente, este reporte se certifica como <strong>RESUELTO</strong> con fecha exacta: <strong>{{ formatDate(resolvedDate) }}</strong>.</p>
+          </div>
           
           <div v-if="photoUrl" class="photo-container">
             <p><strong>Evidencia fotográfica:</strong></p>
@@ -574,5 +596,52 @@ function getStatusColor(status: string) {
   .search-box { flex-direction: column; }
   .btn-main { padding: 14px; }
   .result-header { flex-direction: column; }
+}
+
+.user-guide-box {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  border-left: 4px solid var(--primary);
+  padding: 12px 16px;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 24px;
+}
+.user-guide-box h4 {
+  margin: 0 0 4px;
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+.user-guide-box p {
+  margin: 0 !important;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.crew-box {
+  background: var(--bg-subtle);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 12px 0;
+  display: inline-block;
+  font-size: 0.9rem;
+  border: 1px solid var(--stroke);
+}
+
+.legal-resolution-box {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid #10b981;
+  padding: 16px;
+  border-radius: 12px;
+  margin-top: 24px;
+}
+.legal-resolution-box h4 {
+  color: #10b981;
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+.legal-resolution-box p {
+  margin: 0 !important;
+  font-size: 0.9rem;
+  color: var(--text);
 }
 </style>
