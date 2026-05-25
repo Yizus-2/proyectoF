@@ -231,6 +231,7 @@ async function handleConfirm() {
 .channel-btn {
   background: var(--bg-subtle);
   border: 1px solid var(--stroke);
+  color: var(--text);
   padding: 8px 16px;
   border-radius: var(--radius-full);
   display: flex;
