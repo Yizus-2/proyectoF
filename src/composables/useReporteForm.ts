@@ -1,5 +1,7 @@
 import { ref, computed } from 'vue'
 import type { ReporteFormState, PasoWizard } from '@/types/reporteForm'
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth'
 
 const estadoInicial: ReporteFormState = {
   pasoActual: 1,
@@ -96,6 +98,41 @@ export function useReporteForm() {
     state.value = JSON.parse(JSON.stringify(estadoInicial))
   }
 
+  async function enviarReporte() {
+    if (!paso1Valido.value || !paso2Valido.value || !paso3Valido.value) {
+      throw new Error('Formulario incompleto')
+    }
+
+    // Buscar el zone_id basado en el nombre de la zona seleccionada
+    let zoneId = null
+    if (state.value.paso2.zona) {
+      const { data: zData } = await supabase.from('zones').select('id').eq('name', state.value.paso2.zona).single()
+      if (zData) zoneId = zData.id
+    }
+
+    const auth = useAuthStore()
+
+    // Mapear al esquema de la base de datos reports
+    const payload = {
+      category: state.value.paso1.tipo, // 'fuga', 'presion', etc
+      priority: state.value.paso1.urgenciaUsuario?.toUpperCase(), // 'CRITICA', 'ALTA', etc
+      description: state.value.paso1.descripcion,
+      address: state.value.paso2.direccion,
+      zone_id: zoneId,
+      lat: state.value.paso2.latitud,
+      lng: state.value.paso2.longitud,
+      reporter_name: state.value.paso3.nombre,
+      reporter_phone: state.value.paso3.telefono,
+      reporter_email: state.value.paso3.email || null,
+      status: 'ACTIVO',
+      reported_by_id: auth.user?.id || null
+      // tracking_code se asume que lo genera un trigger en la BD o lo podemos generar si fuera necesario
+    }
+
+    const { error } = await supabase.from('reports').insert(payload)
+    if (error) throw error
+  }
+
   function getPayloadFormateado() {
     return {
       tipo: state.value.paso1.tipo,
@@ -124,6 +161,7 @@ export function useReporteForm() {
     obtenerUbicacionGPS,
     actualizarPinMapa,
     resetearFormulario,
-    getPayloadFormateado
+    getPayloadFormateado,
+    enviarReporte
   }
 }
