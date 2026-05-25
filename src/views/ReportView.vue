@@ -95,6 +95,21 @@ function useMyLocation() {
   )
 }
 
+const ZONE_CENTERS = [
+  { name: 'Centro Histórico', lat: 11.2444, lng: -74.2127 },
+  { name: 'Rodadero', lat: 11.2031, lng: -74.2275 },
+  { name: 'Mamatoco', lat: 11.2263, lng: -74.1798 },
+  { name: 'Bastidas', lat: 11.2421, lng: -74.1843 },
+  { name: 'Gaira', lat: 11.1965, lng: -74.2210 },
+  { name: 'Taganga', lat: 11.2675, lng: -74.1912 },
+  { name: 'Bonda', lat: 11.2285, lng: -74.1231 },
+  { name: 'Zona Industrial', lat: 11.2181, lng: -74.1805 },
+  { name: 'Pescaíto', lat: 11.2501, lng: -74.2122 },
+  { name: 'Otros', lat: 11.2404, lng: -74.2110 }
+]
+
+const suggestedZoneName = ref<string>('')
+
 function updateLocation(lat: number, lng: number) {
   form.value.lat = lat
   form.value.lng = lng
@@ -102,7 +117,26 @@ function updateLocation(lat: number, lng: number) {
   if (marker.value) marker.value.setLatLng([lat, lng])
   else marker.value = L.marker([lat, lng]).addTo(mapInstance.value)
   
-  // Reverse Geocoding automático
+  // 1. Calcular zona más cercana por distancia geodésica simplificada
+  let minDistance = Infinity
+  let closestZoneName = 'Otros'
+  
+  ZONE_CENTERS.forEach(zc => {
+    const dist = Math.sqrt(Math.pow(lat - zc.lat, 2) + Math.pow(lng - zc.lng, 2))
+    if (dist < minDistance) {
+      minDistance = dist
+      closestZoneName = zc.name
+    }
+  })
+
+  // Pre-seleccionar la zona más cercana
+  const matchedZone = zones.value.find(z => z.name.toLowerCase().trim() === closestZoneName.toLowerCase().trim())
+  if (matchedZone) {
+    form.value.zone_id = matchedZone.id
+    suggestedZoneName.value = matchedZone.name
+  }
+
+  // 2. Reverse Geocoding automático para complementar dirección y barrio
   fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
     .then(res => res.json())
     .then(data => {
@@ -110,8 +144,22 @@ function updateLocation(lat: number, lng: number) {
         if (!form.value.address) {
           form.value.address = data.display_name.split(',').slice(0, 2).join(',')
         }
-        if (!form.value.sector) {
-          form.value.sector = data.address.suburb || data.address.neighbourhood || data.address.city_district || ''
+        
+        const suburb = (data.address.suburb || data.address.neighbourhood || data.address.city_district || '').toLowerCase().trim()
+        if (suburb) {
+          if (!form.value.sector) {
+            form.value.sector = data.address.suburb || data.address.neighbourhood || data.address.city_district || ''
+          }
+          
+          // Intentar match directo de texto para afinar la zona si OpenStreetMap da un barrio conocido
+          const matchedByText = zones.value.find(z => 
+            suburb.includes(z.name.toLowerCase().trim()) || 
+            z.name.toLowerCase().trim().includes(suburb)
+          )
+          if (matchedByText) {
+            form.value.zone_id = matchedByText.id
+            suggestedZoneName.value = matchedByText.name
+          }
         }
       }
     })
@@ -297,6 +345,9 @@ function resetForm() {
               <option :value="null">— Seleccionar zona —</option>
               <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.name }}</option>
             </select>
+            <div v-if="suggestedZoneName" class="suggested-zone-badge">
+              ✨ Zona sugerida por ubicación: <strong>{{ suggestedZoneName }}</strong>
+            </div>
           </div>
           <div class="step-nav">
             <span></span>
@@ -466,6 +517,21 @@ function resetForm() {
   .map-host { height:260px; }
 }
 @media (min-width:900px) {
-  .map-host { height:400px; }
+  .map-host { height: 400px; }
+}
+
+.suggested-zone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--primary) 30%, transparent);
+  padding: 6px 12px;
+  border-radius: 8px;
+  margin-top: 6px;
+  font-weight: 500;
+  width: fit-content;
 }
 </style>

@@ -217,11 +217,6 @@ async function saveManagement() {
         work_order: crewName,
         assigned_at: new Date().toISOString()
       }).eq('id', selectedReport.value.id)
-      
-      // Incrementar carga de la cuadrilla
-      await supabase.from('crews').update({
-        workload: (cuadrillas.value.find(c => c.id === manageForm.value.cuadrilla_id)?.workload || 0) + 1
-      }).eq('id', manageForm.value.cuadrilla_id)
     } 
     // Si es cuadrilla enviando evidencia
     else if (evidencePath) {
