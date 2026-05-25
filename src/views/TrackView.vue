@@ -160,17 +160,21 @@ function getStatusColor(status: string) {
   if (['EN_PROGRESO', 'ASIGNADO'].includes(status)) return 'var(--warning)'
   return 'var(--primary)'
 }
+
+function printLegalDocument() {
+  window.print()
+}
 </script>
 
 <template>
   <main class="track-layout">
     <div class="track-container">
-      <header class="track-header">
+      <header class="track-header no-print">
         <h1>Consultar Reporte</h1>
         <p>Ingresa tu código de seguimiento para ver el estado actual de tu reporte.</p>
       </header>
 
-      <form @submit.prevent="searchReport" class="search-box">
+      <form @submit.prevent="searchReport" class="search-box no-print">
         <input 
           v-model="trackingCode" 
           type="text" 
@@ -230,9 +234,16 @@ function getStatusColor(status: string) {
           </div>
 
           <div class="actions" v-if="['CERRADO', 'EVALUADO'].includes(reportData.status)">
-            <RouterLink :to="`/encuesta/${reportData.tracking_code}`" class="btn-ghost">
+            <RouterLink :to="`/encuesta/${reportData.tracking_code}`" class="btn-ghost no-print">
               ⭐ Evaluar servicio
             </RouterLink>
+          </div>
+
+          <!-- Botón de impresión legal -->
+          <div class="print-actions no-print">
+            <button @click="printLegalDocument" class="btn-outline-primary">
+              📄 Descargar Comprobante Legal (PDF)
+            </button>
           </div>
 
           <div v-if="auth.isAdmin || (auth.isOperator && !['RESUELTO', 'RECHAZADO', 'CERRADO', 'EVALUADO'].includes(reportData.status))" class="quick-manage-box">
@@ -643,5 +654,54 @@ function getStatusColor(status: string) {
   margin: 0 !important;
   font-size: 0.9rem;
   color: var(--text);
+}
+.btn-outline-primary {
+  background: transparent;
+  border: 2px solid var(--primary);
+  color: var(--primary);
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  margin-top: 24px;
+}
+.btn-outline-primary:hover {
+  background: var(--primary);
+  color: white;
+}
+
+@media print {
+  .no-print { display: none !important; }
+  
+  body, .track-layout {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .result-card {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .result-card::before {
+    content: "COMPROBANTE LEGAL PQR - ESSMAR SIGVI";
+    display: block;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 24px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 12px;
+  }
+  
+  .user-guide-box, .legal-resolution-box, .crew-box {
+    border: 1px solid #000 !important;
+    background: transparent !important;
+    color: black !important;
+  }
 }
 </style>

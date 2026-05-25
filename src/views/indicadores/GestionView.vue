@@ -50,7 +50,7 @@ const manageForm = ref({
 const isUpdating = ref(false)
 
 const filteredReports = computed(() => {
-  let baseList = reports.value
+  let baseList = reportsStore.filteredReports
 
   // Apply Global KPI Filter
   const kpiFilter = reportsStore.kpiFilter
@@ -254,6 +254,12 @@ function getSlaStatus(report: Report) {
       </div>
       
       <div class="filter-group">
+        <select v-model="reportsStore.filterDate" class="filter-btn" style="border: 1px solid var(--stroke); margin-right: 8px;">
+          <option value="ALL">🗓️ Histórico Total</option>
+          <option value="TODAY">📍 Solo Hoy</option>
+          <option value="WEEK">📅 Esta Semana</option>
+          <option value="MONTH">📊 Este Mes</option>
+        </select>
         <button class="filter-btn" :class="{ active: filterStatus === 'ACTIVOS' }" @click="filterStatus = 'ACTIVOS'">Activos</button>
         <button class="filter-btn" :class="{ active: filterStatus === 'CERRADOS' }" @click="filterStatus = 'CERRADOS'">Cerrados</button>
         <button class="filter-btn" :class="{ active: filterStatus === 'TODOS' }" @click="filterStatus = 'TODOS'">Todos</button>
