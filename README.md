@@ -124,12 +124,14 @@ El apartado de **Indicadores** centraliza toda la gestión operativa y las métr
 ### Gráficas
 | Gráfica | Descripción |
 |---------|-------------|
-| **Tendencia de Reportes (7 días)** | Gráfico de línea que muestra el volumen de ingresos temporales. |
-| **Cumplimiento SLA de Atención** | Gráfico de dona (Porcentaje de reportes resueltos dentro del tiempo objetivo según su nivel de riesgo). |
-| **Reportes por Nivel de Riesgo** | Gráfico de barras (Reportes activos distribuidos por urgencia de atención). |
-| **Canales de Reporte (Barras Horizontales)** | Distribución completa de reportes por medio de recepción, priorizando lectura visual. |
-| **Eficiencia por Zona** | Distribución de cargas y tiempos de respuesta geográficos. |
-| **Gestión de Operaciones** *(pestaña integrada)* | Interfaz de asignación automática de cuadrillas y verificación. |
+| **Tendencia de Reportes (7 días)** | Gráfico de área (línea gruesa púrpura) que muestra el volumen de ingresos temporales. |
+| **Cumplimiento SLA de Atención** | Gráfico de dona con paleta estándar de semáforo. |
+| **Reportes por Nivel de Riesgo** | Gráfico de barras verticales clasificando activos. |
+| **Canales de Reporte** | Distribución de reportes utilizando una paleta distintiva de azules para evitar confusiones de color. |
+| **Gestión de Operaciones** *(pestaña integrada)* | Interfaz de asignación automática de cuadrillas y gestión rápida. |
+
+### Filtros en Tiempo Real
+El Dashboard soporta filtrado reactivo de tiempo ("Hoy", "Esta Semana", "Este Mes", "Todos"), el cual recalcula y re-renderiza todas las gráficas y KPIs instantáneamente usando la potencia de Pinia en Vue 3. Además, los gráficos analíticos tienen un diseño limpio, profesional y **libre de emojis** para mejorar la legibilidad.
 
 ### Canales de Reporte Completos
 La gráfica de Canales de Reporte incluye todos los medios disponibles:
@@ -296,31 +298,31 @@ export function useCuadrillaAssignment() {
 
 ### Flujo de Estados del Reporte
 ```
-reportado → asignado → en_progreso → evidencia_pendiente → verificacion_supervisor → completado
-                                    ↘ reenviar (vuelve a evidencia_pendiente)
-                                    ↘ rechazado
+reportado → asignado → en_progreso (Llegada) → resuelto (Fin trabajo) → cerrado (Verificado)
+                                                 ↘ reenviar (regresa a en_progreso)
+                                                 ↘ rechazado
 ```
+
+### Automatización de Carga de Cuadrillas
+El workload de las cuadrillas se gestiona por completo mediante un Trigger en PostgreSQL (`trg_update_crew_workload`). Cuando un reporte alcanza el estado `resuelto`, la base de datos detecta que la cuadrilla ha terminado y descuenta automáticamente `-1` a su carga de trabajo. Esto libera a los operarios para recibir nuevas asignaciones inmediatas.
 
 ### Operario: Subida de Evidencias
 El operario debe subir evidencia del trabajo realizado antes de que el reporte pueda avanzar:
 
-- **Fotografía obligatoria** del trabajo realizado (captura desde cámara del dispositivo).
-- **Formulario breve** con:
-  - Descripción de actividades ejecutadas.
-  - Materiales utilizados.
-  - Tiempo dedicado (horas).
+- **Fotografía doble obligatoria**: Foto de "Llegada al sitio" para iniciar (`en_progreso`), y foto de "Finalización" para culminar (`resuelto`).
+- **Validaciones estrictas**: El formulario valida campos de contacto usando HTML5 (patrones para texto y tipo "tel" en teléfonos) y el modo oscuro maneja paletas contrastantes en todos los componentes.
 - **Geolocalización automática** al momento de la captura.
 
-> **Restricción:** El operario **NO puede cambiar el estado del reporte a `completado`**. Su acción solo genera la evidencia y mueve el estado a `verificacion_supervisor`.
+> **Restricción:** El operario mueve el estado a `resuelto` para indicar que terminó en calle, pero el caso no se cierra oficialmente. Su acción genera la evidencia y lanza el reporte a la cola del supervisor.
 
 ### Supervisor: Verificación de Evidencias
 El supervisor es el **único rol con permiso para cambiar el estado final** del reporte:
 
 | Acción | Estado Resultante | Descripción |
 |--------|-------------------|-------------|
-| ✅ **Aprobar y Completar** | `completado` | La evidencia es válida, el trabajo está confirmado. |
-| 🔄 **Solicitar Reenvío** | `evidencia_pendiente` | La evidencia es insuficiente, se solicita nueva evidencia al operario. |
-| ❌ **Rechazar** | `rechazado` | El trabajo no se realizó o la evidencia es fraudulenta. |
+| ✅ **Aprobar y Completar** | `cerrado` | La evidencia fotográfica (Llegada y Finalización) es válida, se cierra el ciclo. |
+| 🔄 **Solicitar Reenvío** | `en_progreso` | La evidencia es insuficiente, se devuelve el estado a la cuadrilla. |
+| ❌ **Rechazar** | `rechazado` | El trabajo no se realizó o la evidencia es inválida. |
 
 > **Obligatorio:** El supervisor debe dejar un **comentario de verificación** en cada acción.
 
