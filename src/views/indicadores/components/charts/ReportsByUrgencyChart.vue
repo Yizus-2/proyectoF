@@ -9,21 +9,21 @@ const kpiConfig = computed(() => store.kpis.find(k => k.id === 'urgencia'))
 
 const datos = computed(() => {
   const reports = store.reportesFiltrados
-  const counts = { critico: 0, alto: 0, medio: 0, bajo: 0 }
+  const counts: Record<string, number> = { critica: 0, alta: 0, media: 0, baja: 0 }
   
   reports.forEach(r => {
     // Solo contar reportes activos
     if (!['completado', 'rechazado', 'cerrado', 'resuelto'].includes(r.status.toLowerCase())) {
-      const p = r.priority?.toLowerCase() || 'medio'
+      const p = r.priority?.toLowerCase() || 'media'
       if (counts[p] !== undefined) counts[p]++
     }
   })
 
   return [
-    { nivel: 'Crítico', cantidad: counts.critico, color: '#dc2626', tiempoMaximo: '< 30 minutos', accionRequerida: 'Cuadrilla inmediata' },
-    { nivel: 'Alto', cantidad: counts.alto, color: '#ea580c', tiempoMaximo: '< 2 horas', accionRequerida: 'Priorizar recurso' },
-    { nivel: 'Medio', cantidad: counts.medio, color: '#d97706', tiempoMaximo: '< 8 horas', accionRequerida: 'Programar visita' },
-    { nivel: 'Bajo', cantidad: counts.bajo, color: '#059669', tiempoMaximo: '< 24 horas', accionRequerida: 'Mantenimiento planeado' }
+    { nivel: 'Crítico', cantidad: counts.critica, color: '#dc2626', tiempoMaximo: '< 30 minutos', accionRequerida: 'Cuadrilla inmediata' },
+    { nivel: 'Alto', cantidad: counts.alta, color: '#ea580c', tiempoMaximo: '< 2 horas', accionRequerida: 'Priorizar recurso' },
+    { nivel: 'Medio', cantidad: counts.media, color: '#d97706', tiempoMaximo: '< 8 horas', accionRequerida: 'Programar visita' },
+    { nivel: 'Bajo', cantidad: counts.baja, color: '#059669', tiempoMaximo: '< 24 horas', accionRequerida: 'Mantenimiento planeado' }
   ]
 })
 

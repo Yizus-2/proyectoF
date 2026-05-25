@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useIndicadoresStore } from '@/stores/indicadores'
+import { useReportsStore } from '@/stores/reports'
 import KpiCard from '../KpiCard.vue'
 
 const store = useIndicadoresStore()
+const reportsStore = useReportsStore()
 
 const kpiConfig = {
   pregunta: '¿Qué zonas tienen más carga?',
@@ -20,8 +22,14 @@ const datos = computed(() => {
   
   reports.forEach(r => {
     if (!['completado', 'rechazado', 'cerrado', 'resuelto'].includes(r.status.toLowerCase())) {
-      // Use zone as string, or zone_id if needed. Supabase stores zone name usually in 'zona' column
-      const zonaStr = r.zona || r.zone_id?.toString() || 'Sin Asignar'
+      let zonaStr = r.zona || r.zone_id?.toString() || 'Sin Asignar'
+      
+      // Buscar en reportsStore.zonesData
+      if (r.zone_id) {
+        const found = reportsStore.zonesData.find(z => z.zone_id === r.zone_id || z.id === r.zone_id)
+        if (found) zonaStr = found.zone_name || found.name || zonaStr
+      }
+      
       if (!counts[zonaStr]) counts[zonaStr] = 0
       counts[zonaStr]++
     }

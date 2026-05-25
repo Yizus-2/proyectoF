@@ -18,10 +18,17 @@ const datos = computed(() => {
   reports.forEach(r => {
     // Solo contar reportes finalizados para SLA
     if (['cerrado', 'resuelto', 'completado', 'evaluado'].includes(r.status.toLowerCase())) {
-      // Simplificado: asumiendo que el store o backend calcula si fue a tiempo
-      // Aquí hacemos un mockup realista basado en status o campos.
-      // Si tuvieramos fecha completado vs fecha limite, se compararía aquí.
-      if (Math.random() > 0.15) {
+      const created = new Date(r.created_at).getTime()
+      const resolved = r.resolved_at ? new Date(r.resolved_at).getTime() : new Date(r.updated_at).getTime()
+      const hoursTaken = (resolved - created) / (1000 * 60 * 60)
+      
+      const p = r.priority?.toLowerCase() || 'media'
+      let maxHours = 8
+      if (p === 'critica') maxHours = 0.5
+      else if (p === 'alta') maxHours = 2
+      else if (p === 'baja') maxHours = 24
+      
+      if (hoursTaken <= maxHours) {
         aTiempo++
       } else {
         vencidos++
