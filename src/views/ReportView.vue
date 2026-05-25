@@ -10,8 +10,30 @@ const auth = useAuthStore()
 const zones = ref<Zone[]>([])
 
 async function loadZones() {
-  const { data } = await supabase.from('zones').select('*').order('name')
-  if (data) zones.value = data
+  try {
+    const { data, error } = await supabase.from('zones').select('*').order('name')
+    if (error) throw error
+    if (data && data.length > 0) {
+      zones.value = data
+      return
+    }
+  } catch (err) {
+    console.warn('Fallo al cargar zonas desde la BD (RLS o Red). Usando hardcodeo de respaldo:', err)
+  }
+
+  // HARDCODEO DE RESPALDO (Mismos IDs que el seeder rebuild_db_v2.sql)
+  zones.value = [
+    { id: 4, name: 'Bastidas', code: 'ZONA-04', sla_hours: 24 },
+    { id: 7, name: 'Bonda', code: 'ZONA-07', sla_hours: 48 },
+    { id: 1, name: 'Centro Histórico', code: 'ZONA-01', sla_hours: 12 },
+    { id: 5, name: 'Gaira', code: 'ZONA-05', sla_hours: 24 },
+    { id: 3, name: 'Mamatoco', code: 'ZONA-03', sla_hours: 24 },
+    { id: 10, name: 'Otros', code: 'ZONA-99', sla_hours: 48 },
+    { id: 9, name: 'Pescaíto', code: 'ZONA-09', sla_hours: 24 },
+    { id: 2, name: 'Rodadero', code: 'ZONA-02', sla_hours: 24 },
+    { id: 6, name: 'Taganga', code: 'ZONA-06', sla_hours: 48 },
+    { id: 8, name: 'Zona Industrial', code: 'ZONA-08', sla_hours: 24 }
+  ]
 }
 loadZones()
 
