@@ -29,6 +29,10 @@ async function reverseGeocode(lat: number, lng: number) {
       
       const sugerencia = `${via} ${num}`.trim()
       
+      if (barrio && !state.value.paso2.sector) {
+        state.value.paso2.sector = barrio
+      }
+
       if (sugerencia && !state.value.paso2.direccion) {
         state.value.paso2.direccion = sugerencia
       }

@@ -8,11 +8,14 @@ const estadoInicial: ReporteFormState = {
   paso1: {
     tipo: null,
     descripcion: '',
-    urgenciaUsuario: null
+    urgenciaUsuario: null,
+    fotoFile: null,
+    fotoPreviewUrl: null
   },
   paso2: {
     direccion: '',
     zona: '',
+    sector: '',
     latitud: null,
     longitud: null,
     ubicacionConfirmada: false
@@ -31,8 +34,9 @@ const state = ref<ReporteFormState>(JSON.parse(JSON.stringify(estadoInicial)))
 export function useReporteForm() {
   const paso1Valido = computed(() => {
     return state.value.paso1.tipo !== null &&
-           state.value.paso1.descripcion.trim().length >= 20 &&
-           state.value.paso1.urgenciaUsuario !== null
+           state.value.paso1.descripcion.trim().length >= 10 &&
+           state.value.paso1.urgenciaUsuario !== null &&
+           state.value.paso1.fotoFile !== null
   })
 
   const paso2Valido = computed(() => {
@@ -98,6 +102,47 @@ export function useReporteForm() {
     state.value = JSON.parse(JSON.stringify(estadoInicial))
   }
 
+  // Función nativa para comprimir imágenes antes de subir
+  function compressImage(file: File, maxWidth = 1280, quality = 0.8): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = (event) => {
+        const img = new Image()
+        img.src = event.target?.result as string
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let width = img.width
+          let height = img.height
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width)
+            width = maxWidth
+          }
+
+          canvas.width = width
+          canvas.height = height
+
+          const ctx = canvas.getContext('2d')
+          if (!ctx) return resolve(file)
+
+          ctx.drawImage(img, 0, 0, width, height)
+
+          canvas.toBlob((blob) => {
+            if (!blob) return resolve(file)
+            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            })
+            resolve(newFile)
+          }, 'image/jpeg', quality)
+        }
+        img.onerror = (e) => reject(e)
+      }
+      reader.onerror = (e) => reject(e)
+    })
+  }
+
   async function enviarReporte() {
     if (!paso1Valido.value || !paso2Valido.value || !paso3Valido.value) {
       throw new Error('Formulario incompleto')
@@ -110,6 +155,21 @@ export function useReporteForm() {
       if (zData) zoneId = zData.id
     }
 
+    // Subir foto si existe
+    let photoPath = null
+    if (state.value.paso1.fotoFile) {
+      try {
+        const compressedFile = await compressImage(state.value.paso1.fotoFile)
+        const ext = compressedFile.name.split('.').pop() || 'jpg'
+        const name = `${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`
+        const { error: upErr } = await supabase.storage.from('reports').upload(name, compressedFile)
+        if (upErr) console.warn('Photo upload error:', upErr.message)
+        else photoPath = name
+      } catch (err) {
+        console.warn('Fallo compresión o subida de imagen', err)
+      }
+    }
+
     const auth = useAuthStore()
 
     // Mapear al esquema de la base de datos reports
@@ -119,12 +179,14 @@ export function useReporteForm() {
       reporter_phone: state.value.paso3.telefono || null,
       reporter_email: state.value.paso3.email || null,
       category: state.value.paso1.tipo, // 'fuga', 'presion', etc
-      priority: state.value.paso1.urgenciaUsuario?.toUpperCase(), // 'CRITICA', 'ALTA', etc
+      priority: state.value.paso1.urgenciaUsuario, // Ya es mayúsculas
       description: state.value.paso1.descripcion,
       address: state.value.paso2.direccion || 'Ubicación seleccionada en mapa',
+      sector: state.value.paso2.sector || null,
       zone_id: zoneId,
       lat: state.value.paso2.latitud,
       lng: state.value.paso2.longitud,
+      photo_path: photoPath,
       source: 'WEB'
     }
 
