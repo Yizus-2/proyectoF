@@ -37,11 +37,11 @@ async function reverseGeocode(lat: number, lng: number) {
       if (barrio && zonasDb.value.length > 0 && !state.value.paso2.zona) {
         const barrioLower = barrio.toLowerCase()
         const match = zonasDb.value.find(z => 
-          z.zone_name.toLowerCase().includes(barrioLower) || 
-          barrioLower.includes(z.zone_name.toLowerCase())
+          z.name.toLowerCase().includes(barrioLower) || 
+          barrioLower.includes(z.name.toLowerCase())
         )
         if (match) {
-          state.value.paso2.zona = match.zone_name
+          state.value.paso2.zona = match.name
         }
       }
     }
@@ -70,18 +70,28 @@ async function searchAddress() {
   gpsError.value = ''
   
   try {
-    // Agregamos Santa Marta, Colombia para acotar la búsqueda por defecto
-    const query = encodeURIComponent(`${state.value.paso2.direccion}, Santa Marta, Colombia`)
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`)
-    const data = await res.json()
+    const direccionOriginal = state.value.paso2.direccion
+    let query = encodeURIComponent(`${direccionOriginal}, Santa Marta, Colombia`)
+    let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`)
+    let data = await res.json()
     
+    // Fallback 1: Quitar todo lo numérico (dirección exacta) y dejar el barrio/texto
+    if (!data || data.length === 0) {
+      const direccionLaxa = direccionOriginal.replace(/[0-9#a-zA-Z-]+\s?/g, (match) => match.includes('#') || /\d/.test(match) ? '' : match).trim()
+      if (direccionLaxa && direccionLaxa.length > 3) {
+        query = encodeURIComponent(`${direccionLaxa}, Santa Marta, Colombia`)
+        res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`)
+        data = await res.json()
+      }
+    }
+
     if (data && data.length > 0) {
       const lat = parseFloat(data[0].lat)
       const lng = parseFloat(data[0].lon)
       actualizarPinMapa(lat, lng)
-      await reverseGeocode(lat, lng) // Para auto-completar zona
+      await reverseGeocode(lat, lng)
     } else {
-      gpsError.value = 'No se encontró la dirección en el mapa. Intenta mover el pin manualmente.'
+      gpsError.value = 'Dirección no encontrada. Intenta acercarte manualmente en el mapa.'
     }
   } catch (error) {
     console.error('Error buscando dirección:', error)
@@ -159,7 +169,7 @@ async function handleMapUpdate(lat: number, lng: number) {
         <div class="select-wrapper">
           <select v-model="state.paso2.zona" class="form-select">
             <option disabled value="">[Seleccione zona ▼]</option>
-            <option v-for="z in zonasDb" :key="z.id" :value="z.zone_name">{{ z.zone_name }}</option>
+            <option v-for="z in zonasDb" :key="z.id" :value="z.name">{{ z.name }}</option>
             <option v-if="zonasDb.length === 0" value="Centro">Centro</option>
             <option v-if="zonasDb.length === 0" value="Norte">Norte</option>
             <option v-if="zonasDb.length === 0" value="Sur">Sur</option>
