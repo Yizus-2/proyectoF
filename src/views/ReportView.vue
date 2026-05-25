@@ -376,13 +376,7 @@ function resetForm() {
         <!-- STEP 1: Location -->
         <section v-show="step === 1" class="form-step">
           <h2 class="step-title">¿Dónde está el problema?</h2>
-          <div class="map-wrap">
-            <LeafletMap class="map-host" @ready="handleMapReady" />
-            <button type="button" class="locate-btn" @click="useMyLocation" title="Usar mi ubicación">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
-            </button>
-            <div v-if="!locationObtained" class="map-hint">Toca el mapa o usa el botón de ubicación</div>
-          </div>
+          
           <div class="field search-field">
             <label for="addr">Buscar Dirección o Barrio</label>
             <div class="search-input-group">
@@ -392,7 +386,15 @@ function resetForm() {
                 <span v-else>🔍 Buscar</span>
               </button>
             </div>
-            <small class="hint">Escribe aquí y presiona Buscar para mover el mapa</small>
+            <small class="hint">Escribe aquí y presiona Buscar para centrar el mapa automáticamente</small>
+          </div>
+
+          <div class="map-wrap">
+            <LeafletMap class="map-host" @ready="handleMapReady" />
+            <button type="button" class="locate-btn" @click="useMyLocation" title="Usar mi ubicación">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+            </button>
+            <div v-if="!locationObtained" class="map-hint">Toca el mapa o usa el botón de ubicación</div>
           </div>
           <div class="field" v-if="locationObtained">
             <label for="sector">Sector / Barrio</label>
