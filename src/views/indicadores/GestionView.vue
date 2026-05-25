@@ -49,14 +49,44 @@ const manageForm = ref({
 })
 const isUpdating = ref(false)
 
+const filterStatus = ref('ACTIVOS') // Deprecated in favor of kpiFilter, but we can keep it for the local tab navigation if needed
+
 const filteredReports = computed(() => {
+  let baseList = reports.value
+
+  // Apply Global KPI Filter
+  const kpiFilter = reportsStore.kpiFilter
+  if (kpiFilter === 'PENDING') {
+    baseList = baseList.filter(r => ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO', 'EVIDENCIA_PENDIENTE', 'VERIFICACION_SUPERVISOR'].includes(r.status))
+  } else if (kpiFilter === 'RESOLVED') {
+    baseList = baseList.filter(r => ['RESUELTO', 'CERRADO', 'EVALUADO'].includes(r.status))
+  } else if (kpiFilter === 'CRITICAL') {
+    baseList = baseList.filter(r => ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO'].includes(r.status) && r.priority === 'CRITICA')
+  }
+
+  // Apply Local List Filter
   if (filterStatus.value === 'ACTIVOS') {
-    return reports.value.filter(r => !['CERRADO', 'EVALUADO', 'RECHAZADO', 'RESUELTO'].includes(r.status))
+    return baseList.filter(r => !['CERRADO', 'EVALUADO', 'RECHAZADO', 'RESUELTO'].includes(r.status))
   }
   if (filterStatus.value === 'CERRADOS') {
-    return reports.value.filter(r => ['CERRADO', 'EVALUADO', 'RESUELTO'].includes(r.status))
+    return baseList.filter(r => ['CERRADO', 'EVALUADO', 'RESUELTO'].includes(r.status))
   }
-  return reports.value
+  return baseList
+})
+
+const primerIncidenteHoyId = computed(() => {
+  const hoy = new Date()
+  const year = hoy.getFullYear()
+  const month = String(hoy.getMonth() + 1).padStart(2, '0')
+  const day = String(hoy.getDate()).padStart(2, '0')
+  const hoyStr = `${year}-${month}-${day}`
+  
+  const reportesHoy = reports.value.filter(r => r.created_at && r.created_at.startsWith(hoyStr))
+  if (reportesHoy.length === 0) return null
+  
+  // Ordenar de más antiguo a más reciente
+  const ordenados = [...reportesHoy].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  return ordenados[0].id
 })
 
 function handleMapReady(map: any) {
@@ -97,6 +127,12 @@ function renderMarkers() {
 watch(filteredReports, () => {
   renderMarkers()
 }, { deep: true })
+
+watch(() => reportsStore.kpiFilter, (newVal) => {
+  if (newVal !== 'ALL') {
+    filterStatus.value = 'TODOS'
+  }
+})
 
 async function loadReports() {
   await reportsStore.fetchReports()
@@ -221,6 +257,10 @@ function getSlaStatus(report: Report) {
     </header>
 
     <div class="content-split">
+      <div v-if="reportsStore.kpiFilter !== 'ALL'" class="active-filter-banner">
+        Mostrando resultados filtrados por el indicador: <strong>{{ reportsStore.kpiFilter }}</strong>
+        <button class="btn-clear-filter" @click="reportsStore.kpiFilter = 'ALL'">Limpiar Filtro</button>
+      </div>
       <!-- Mapa -->
       <div class="map-container">
         <LeafletMap class="leaflet-host" @ready="handleMapReady" />
@@ -254,51 +294,60 @@ function getSlaStatus(report: Report) {
           <p>No hay reportes que coincidan con tu filtro.</p>
         </div>
 
-        <div v-else class="reports-grid">
-          <article v-for="report in filteredReports" :key="report.id" class="report-card">
-            <div class="card-header">
+        <div v-else class="reports-list">
+          <div class="list-header">
+            <span>PQR / ID</span>
+            <span>Ubicación</span>
+            <span>Categoría</span>
+            <span>Estado / Prioridad</span>
+            <span>Acción</span>
+          </div>
+          <article v-for="report in filteredReports" :key="report.id" class="report-list-item" :class="{ 'first-incident': report.id === primerIncidenteHoyId }">
+            
+            <div class="list-col col-id">
               <span class="tracking-code">{{ report.tracking_code || `#${report.id}` }}</span>
+              <span v-if="report.id === primerIncidenteHoyId" class="badge badge--first">🌟 1er Incidente de Hoy</span>
+              <span v-if="report.is_recurrent" class="badge badge--outline">REINCIDENTE</span>
+            </div>
+            
+            <div class="list-col col-address">
+              <h3 class="report-address">{{ report.address }}</h3>
+              <p class="report-desc text-truncate">{{ report.description || 'Sin descripción adicional.' }}</p>
+            </div>
+            
+            <div class="list-col col-meta">
+              <div class="meta-item">
+                <span>{{ report.category.replace('_', ' ') }}</span>
+              </div>
+              <div class="meta-item time">
+                <span>{{ formatDate(report.created_at) }}</span>
+              </div>
+            </div>
+
+            <div class="list-col col-status">
               <div class="badges">
                 <span class="badge" :class="getSlaStatus(report).class">{{ getSlaStatus(report).label }}</span>
                 <span class="badge" :class="getPriorityColor(report.priority)">{{ report.priority }}</span>
-                <span class="badge badge--outline" v-if="report.is_recurrent">REINCIDENTE</span>
+              </div>
+              <div v-if="report.work_order" class="work-order-text">
+                <small>Asignado: <strong>{{ report.work_order }}</strong></small>
               </div>
             </div>
             
-            <div class="card-body">
-              <h3 class="report-address">{{ report.address }}</h3>
-              <p class="report-desc">{{ report.description || 'Sin descripción adicional.' }}</p>
-              
-              <div class="meta-info">
-                <div class="meta-item" title="Categoría">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                  <span>{{ report.category.replace('_', ' ') }}</span>
-                </div>
-                <div class="meta-item ml-auto" title="Fecha de reporte">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span>{{ formatDate(report.created_at) }}</span>
-                </div>
-              </div>
-
-              <div v-if="report.work_order" class="work-order-badge">
-                <strong>Cuadrilla:</strong> {{ report.work_order }}
-              </div>
-            </div>
-            
-            <div class="card-footer">
+            <div class="list-col col-action">
               <button 
                 v-if="!['CERRADO', 'RECHAZADO', 'EVALUADO'].includes(report.status)"
                 class="btn-manage" 
                 @click="openManageModal(report)"
               >
-                Gestionar Reporte
+                Gestionar
                 <span class="status-indicator" :class="report.status.toLowerCase()">{{ report.status }}</span>
               </button>
-              <div v-else class="btn-manage" style="cursor: not-allowed; opacity: 0.7; background: var(--bg-subtle);">
-                Reporte Finalizado
-                <span class="status-indicator" style="background: transparent; color: var(--text);">{{ report.status }}</span>
+              <div v-else class="btn-manage disabled">
+                Finalizado
               </div>
             </div>
+
           </article>
         </div>
       </div>
@@ -503,123 +552,116 @@ function getSlaStatus(report: Report) {
   height: 100%;
 }
 
-.reports-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
-}
-
-.report-card {
-  background: var(--card);
-  border: 1px solid var(--stroke);
-  border-radius: 16px;
+.reports-list {
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  gap: 12px;
 }
 
-.report-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0,0,0,0.05);
-}
-
-.card-header {
-  padding: 16px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  border-bottom: 1px solid var(--bg-subtle);
-}
-
-.badges {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.badge {
-  font-size: 0.75rem;
+.list-header {
+  display: grid;
+  grid-template-columns: 180px 2fr 1.2fr 180px 180px;
+  gap: 16px;
+  padding: 0 16px 8px 16px;
+  border-bottom: 2px solid var(--stroke);
+  color: var(--muted);
   font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 6px;
+  font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.badge--critical { background: #991b1b; color: white; }
-.badge--danger { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-.badge--warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-.badge--neutral { background: var(--bg-subtle); color: var(--muted); }
-.badge--outline { background: transparent; border: 1px solid var(--stroke); color: var(--text-secondary); }
-
-/* SLA Badges */
-.sla--done { background: #10b981; color: white; }
-.sla--expired { background: #ef4444; color: white; animation: pulse 2s infinite; }
-.sla--warning { background: #f59e0b; color: white; }
-.sla--ok { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; }
-.sla--none { background: #64748b; color: white; }
-
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
+.report-list-item {
+  display: grid;
+  grid-template-columns: 180px 2fr 1.2fr 180px 180px;
+  gap: 16px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.2s ease;
 }
 
-.tracking-code {
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-family: monospace;
-  background: var(--bg-subtle);
-  padding: 4px 8px;
-  border-radius: 6px;
+.report-list-item:hover {
+  transform: translateX(4px);
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
-.card-body {
-  padding: 20px;
-  flex-grow: 1;
+.report-list-item.first-incident {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(90deg, rgba(245,158,11,0.05) 0%, var(--card) 100%);
 }
 
-.report-address {
-  margin: 0 0 8px 0;
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1.3;
+.list-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.report-desc {
-  margin: 0 0 16px 0;
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+.col-id {
+  align-items: flex-start;
+}
+
+.col-address {
   overflow: hidden;
 }
 
-.meta-info {
-  display: flex;
-  gap: 16px;
-  align-items: center;
+.col-action {
+  align-items: flex-end;
+}
+
+.badge--first {
+  background: #f59e0b20;
+  color: #d97706;
+  border: 1px solid #f59e0b50;
+  font-size: 0.7rem;
+  margin-top: 4px;
+}
+
+.report-address {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.report-desc {
+  margin: 0;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.text-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .meta-item {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.ml-auto { margin-left: auto; }
-
-.work-order-badge {
-  margin-top: 14px;
-  padding: 8px 12px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--stroke);
-  border-radius: 8px;
   font-size: 0.85rem;
-  color: var(--text-secondary);
+  color: var(--muted);
+}
+
+.meta-item.time {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.work-order-text {
+  font-size: 0.85rem;
+  color: var(--primary);
+  margin-top: 4px;
 }
 
 .card-footer {
@@ -631,22 +673,31 @@ function getSlaStatus(report: Report) {
 
 .btn-manage {
   width: 100%;
-  padding: 10px 14px;
-  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--bg-body);
   border: 1px solid var(--stroke);
-  background: var(--card);
+  padding: 8px;
+  border-radius: 8px;
   color: var(--text);
   font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   transition: all 0.2s;
 }
 
-.btn-manage:hover {
+.btn-manage:hover:not(.disabled) {
+  background: var(--primary);
+  color: white;
   border-color: var(--primary);
-  background: var(--bg-subtle);
+}
+
+.btn-manage.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .status-indicator {
@@ -792,9 +843,39 @@ function getSlaStatus(report: Report) {
   .filter-group { width: 100%; }
   .filter-btn { flex: 1; text-align: center; font-size: .85rem; }
   .map-container { height: 280px; }
-  .reports-grid { grid-template-columns: 1fr; }
+  .reports-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .report-list-item, .list-header {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
   .input-action-row {
     flex-direction: column;
   }
+}
+
+.active-filter-banner {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  padding: 12px 16px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.btn-clear-filter {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.8rem;
 }
 </style>

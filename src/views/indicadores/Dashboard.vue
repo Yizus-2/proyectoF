@@ -42,6 +42,11 @@ async function loadDashboardData() {
   await reportsStore.fetchReports()
 }
 
+function handleKpiClick(filter: 'ALL' | 'PENDING' | 'RESOLVED' | 'CRITICAL') {
+  reportsStore.kpiFilter = filter
+  activeTab.value = 'operations'
+}
+
 onMounted(() => {
   loadDashboardData()
   reportsStore.subscribeToReports()
@@ -189,6 +194,38 @@ const icons = {
         <p class="header-subtitle">Monitoreo operativo y analítica en tiempo real – ESSMAR SIGVI</p>
       </div>
       
+      <!-- Resumen de Alto Nivel (KPIs) -->
+      <div class="kpi-banner" style="width: 100%; margin: 16px 0;">
+        <div class="kpi-card glass-card kpi-clickable" @click="handleKpiClick('ALL')">
+          <div class="kpi-icon">📋</div>
+          <div class="kpi-data">
+            <h3>{{ kpis.total }}</h3>
+            <p>Total Reportes</p>
+          </div>
+        </div>
+        <div class="kpi-card glass-card warning kpi-clickable" @click="handleKpiClick('PENDING')">
+          <div class="kpi-icon">⏳</div>
+          <div class="kpi-data">
+            <h3>{{ kpis.pending }}</h3>
+            <p>Pendientes</p>
+          </div>
+        </div>
+        <div class="kpi-card glass-card success kpi-clickable" @click="handleKpiClick('RESOLVED')">
+          <div class="kpi-icon">✅</div>
+          <div class="kpi-data">
+            <h3>{{ kpis.resolved }}</h3>
+            <p>Resueltos</p>
+          </div>
+        </div>
+        <div class="kpi-card glass-card danger kpi-clickable" @click="handleKpiClick('CRITICAL')">
+          <div class="kpi-icon">🚨</div>
+          <div class="kpi-data">
+            <h3>{{ kpis.critical }}</h3>
+            <p>Críticos Activos</p>
+          </div>
+        </div>
+      </div>
+      
       <!-- Sub-navegación de Pestañas (Premium Glass) -->
       <div class="navigation-tabs">
         <button
@@ -234,37 +271,7 @@ const icons = {
         <!-- Escala Viva -->
         <RiskScaleLegend :contexto="indicadoresStore.contextoActual" />
 
-        <!-- Resumen de Alto Nivel (KPIs) -->
-        <div class="kpi-banner">
-          <div class="kpi-card glass-card">
-            <div class="kpi-icon">📋</div>
-            <div class="kpi-data">
-              <h3>{{ kpis.total }}</h3>
-              <p>Total Reportes</p>
-            </div>
-          </div>
-          <div class="kpi-card glass-card warning">
-            <div class="kpi-icon">⏳</div>
-            <div class="kpi-data">
-              <h3>{{ kpis.pending }}</h3>
-              <p>Pendientes</p>
-            </div>
-          </div>
-          <div class="kpi-card glass-card success">
-            <div class="kpi-icon">✅</div>
-            <div class="kpi-data">
-              <h3>{{ kpis.resolved }}</h3>
-              <p>Resueltos</p>
-            </div>
-          </div>
-          <div class="kpi-card glass-card danger">
-            <div class="kpi-icon">🚨</div>
-            <div class="kpi-data">
-              <h3>{{ kpis.critical }}</h3>
-              <p>Críticos Activos</p>
-            </div>
-          </div>
-        </div>
+
 
         <!-- Nueva Cuadrícula v2.1 Mejorada -->
         <section class="dashboard-grid">
@@ -412,9 +419,14 @@ const icons = {
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.kpi-card:hover {
+.kpi-clickable {
+  cursor: pointer;
+}
+
+.kpi-clickable:hover {
   transform: translateY(-4px);
   box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+  border-color: var(--primary);
 }
 
 .kpi-icon {

@@ -6,6 +6,7 @@ import type { Report } from '@/types/report'
 export const useReportsStore = defineStore('reports', () => {
   const reports = ref<Report[]>([])
   const filterDate = ref<'ALL' | 'TODAY' | 'WEEK' | 'MONTH'>('ALL')
+  const kpiFilter = ref<'ALL' | 'PENDING' | 'RESOLVED' | 'CRITICAL'>('ALL')
   const zonesData = ref<any[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -198,6 +199,7 @@ export const useReportsStore = defineStore('reports', () => {
     channelStats,
     slaStats,
     recentEvents,
-    filterDate
+    filterDate,
+    kpiFilter
   }
 })
