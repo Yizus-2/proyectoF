@@ -56,6 +56,8 @@ const mapInstance = ref<any>(null)
 const marker = ref<any>(null)
 const locationObtained = ref(false)
 
+const isSearchingMap = ref(false)
+
 function onPhotoSelected(e: Event) {
   const input = e.target as HTMLInputElement
   if (!input.files?.length) return
@@ -63,19 +65,14 @@ function onPhotoSelected(e: Event) {
   photoPreviewUrl.value = URL.createObjectURL(input.files[0])
 }
 
+const SANTA_MARTA_CENTER = [11.2404, -74.1954]
+
 function handleMapReady(m: any) {
   mapInstance.value = m
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        updateLocation(pos.coords.latitude, pos.coords.longitude)
-        m.setView([pos.coords.latitude, pos.coords.longitude], 17)
-        locationObtained.value = true
-      },
-      (err) => console.warn('No se pudo obtener ubicación con alta precisión', err),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    )
-  }
+  
+  // Por defecto, centrar en Santa Marta y no forzar el GPS (ya que en escritorio suele fallar catastróficamente)
+  m.setView(SANTA_MARTA_CENTER, 13)
+
   m.on('click', (e: any) => {
     updateLocation(e.latlng.lat, e.latlng.lng)
     locationObtained.value = true
@@ -83,16 +80,52 @@ function handleMapReady(m: any) {
 }
 
 function useMyLocation() {
-  if (!navigator.geolocation) return
+  if (!navigator.geolocation) {
+    alert('Geolocalización no soportada.')
+    return
+  }
+  
   navigator.geolocation.getCurrentPosition(
     (pos) => {
+      // Si la precisión es muy mala (> 5000 metros), advertir
+      if (pos.coords.accuracy > 5000) {
+        alert('Tu señal GPS actual es muy débil o inexacta (común en PC de escritorio). Usa el buscador de dirección o mueve el pin manualmente.')
+      }
       updateLocation(pos.coords.latitude, pos.coords.longitude)
       mapInstance.value?.setView([pos.coords.latitude, pos.coords.longitude], 17)
       locationObtained.value = true
     },
-    (err) => console.warn('No se pudo obtener ubicación con alta precisión', err),
+    (err) => {
+      console.warn('No se pudo obtener ubicación con alta precisión', err)
+      alert('Error al obtener GPS. Intenta usar el buscador manual.')
+    },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   )
+}
+
+async function searchOnMap() {
+  if (!form.value.address) return
+  
+  isSearchingMap.value = true
+  try {
+    const query = encodeURIComponent(`${form.value.address}, Santa Marta, Colombia`)
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`)
+    const data = await res.json()
+    
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat)
+      const lng = parseFloat(data[0].lon)
+      updateLocation(lat, lng)
+      mapInstance.value?.setView([lat, lng], 17)
+      locationObtained.value = true
+    } else {
+      alert('No se encontró el lugar. Intenta ser más general (ej. solo el nombre del barrio).')
+    }
+  } catch (error) {
+    console.error('Error searching:', error)
+  } finally {
+    isSearchingMap.value = false
+  }
 }
 
 const ZONE_CENTERS = [
@@ -328,12 +361,19 @@ function resetForm() {
             </button>
             <div v-if="!locationObtained" class="map-hint">Toca el mapa o usa el botón de ubicación</div>
           </div>
-          <div class="field">
-            <label for="addr">Dirección o referencia</label>
-            <input id="addr" v-model="form.address" type="text" placeholder="Ej: Calle 12 #3-45, frente a la panadería" />
+          <div class="field search-field">
+            <label for="addr">Buscar Dirección o Barrio</label>
+            <div class="search-input-group">
+              <input id="addr" v-model="form.address" type="text" placeholder="Ej: Calle 12 #3-45, Centro" @keyup.enter="searchOnMap" />
+              <button type="button" class="btn-search" @click="searchOnMap" :disabled="isSearchingMap || !form.address">
+                <span v-if="isSearchingMap">⏳</span>
+                <span v-else>🔍 Buscar</span>
+              </button>
+            </div>
+            <small class="hint">Escribe aquí y presiona Buscar para mover el mapa</small>
           </div>
           <div class="field">
-            <label for="sector">Barrio o Sector (Autocompletado)</label>
+            <label for="sector">Sector (Autocompletado)</label>
             <input id="sector" v-model="form.sector" type="text" placeholder="Ej: Pescaito, El Rodadero, etc." />
           </div>
           <div class="field" v-if="form.lat && form.lng">
@@ -569,6 +609,13 @@ function resetForm() {
 .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent); background: var(--card); }
 .fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .readonly-input { background: color-mix(in srgb, var(--stroke) 20%, transparent) !important; color: var(--text) !important; font-family: monospace; font-weight: 700; cursor: default; border-style: dashed; }
+
+.search-input-group { display: flex; gap: 8px; }
+.search-input-group input { flex: 1; }
+.btn-search { background: var(--bg-subtle); border: 2px solid var(--stroke); border-radius: 12px; padding: 0 16px; color: var(--text); font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; }
+.btn-search:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.btn-search:disabled { opacity: 0.6; cursor: wait; }
+.hint { font-size: 0.8rem; color: var(--muted); margin-top: -4px; }
 
 /* Photo */
 .upload-area { display: flex; align-items: center; justify-content: center; min-height: 120px; border: 2px dashed var(--stroke); border-radius: 16px; cursor: pointer; background: var(--bg-subtle); font-weight: 700; color: var(--text); transition: all 0.2s; overflow: hidden; position: relative; }

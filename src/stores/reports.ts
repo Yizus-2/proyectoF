@@ -75,17 +75,23 @@ export const useReportsStore = defineStore('reports', () => {
   // KPIs computed
   const kpis = computed(() => {
     const list = filteredReports.value
-    const activos = list.filter(r => 
+    
+    const total = list.length
+    
+    const pending = list.filter(r => 
       ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO', 'EVIDENCIA_PENDIENTE', 'VERIFICACION_SUPERVISOR'].includes(r.status)
     ).length
 
-    const enProgreso = list.filter(r => r.status === 'EN_PROGRESO').length
-
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const resueltos = list.filter(r => 
+    const resolved = list.filter(r => 
       ['RESUELTO', 'CERRADO', 'EVALUADO'].includes(r.status) &&
       r.resolved_at && new Date(r.resolved_at) >= startOfMonth
+    ).length
+
+    const critical = list.filter(r => 
+      ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO'].includes(r.status) && 
+      r.priority === 'CRITICA'
     ).length
 
     const resolvedList = list.filter(r => r.resolved_at && r.created_at)
@@ -100,7 +106,7 @@ export const useReportsStore = defineStore('reports', () => {
       avgTime = 4.2
     }
 
-    return { activos, enProgreso, resueltos, tiempoPromedio: avgTime }
+    return { total, pending, resolved, critical, avgTime }
   })
 
   // Trend statistics (last 7 days)
