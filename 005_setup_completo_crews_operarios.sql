@@ -62,6 +62,33 @@ END $$;
 
 GRANT SELECT, INSERT ON public.evidences TO anon, authenticated;
 
+-- 2.5. Crear tabla verifications
+CREATE TABLE IF NOT EXISTS public.verifications (
+  id             BIGSERIAL PRIMARY KEY,
+  report_id      BIGINT NOT NULL REFERENCES public.reports(id) ON DELETE CASCADE,
+  supervisor_id  UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  decision       TEXT NOT NULL CHECK (decision IN ('APROBADO', 'RECHAZADO', 'REGLAMENTO_PENDIENTE')),
+  comments       TEXT,
+  created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.verifications ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'verifications' AND policyname = 'verifications_viewable_by_all') THEN
+    CREATE POLICY "verifications_viewable_by_all" ON public.verifications FOR SELECT USING (
+      EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'operator', 'supervisor'))
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'verifications' AND policyname = 'supervisors_can_insert_verifications') THEN
+    CREATE POLICY "supervisors_can_insert_verifications" ON public.verifications FOR INSERT WITH CHECK (
+      EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'supervisor'))
+    );
+  END IF;
+END $$;
+
+GRANT SELECT, INSERT ON public.verifications TO anon, authenticated;
+
 -- 3. Asegurar que el rol 'supervisor' esté permitido en profiles
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check CHECK (role IN ('admin', 'operator', 'supervisor', 'citizen'));

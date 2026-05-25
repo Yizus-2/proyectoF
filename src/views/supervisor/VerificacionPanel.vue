@@ -28,7 +28,7 @@ watch(
       const reportsWithEvidence = await Promise.all(
         supervisorReports.map(async (report: any) => {
           const existing = pendingReports.value.find(p => p.id === report.id)
-          if (existing && existing.status === report.status && existing.evidence) {
+          if (existing && existing.status === report.status && existing.evidences && existing.evidences.length > 0) {
             return existing
           }
 
@@ -36,14 +36,12 @@ watch(
             .from('evidences')
             .select('*')
             .eq('report_id', report.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
+            .order('created_at', { ascending: true })
 
           if (evErr) console.warn('Error reading evidence for report', report.id, evErr)
           return {
             ...report,
-            evidence: evidenceData || null
+            evidences: evidenceData || []
           }
         })
       )
@@ -163,22 +161,22 @@ onMounted(() => {
         </div>
 
         <!-- Tarjeta: Evidencia del Operario -->
-        <div class="card-section evidence-meta" v-if="report.evidence">
-          <h5 class="section-title">📸 Evidencia Recibida</h5>
-          <div class="evidence-grid">
-            <div class="image-wrapper">
-              <img :src="report.evidence.evidence_url" alt="Foto de evidencia" class="evidence-img" />
-            </div>
-            <div class="evidence-details">
-              <p class="desc"><strong>Detalles:</strong> {{ report.evidence.description }}</p>
-              <p v-if="report.evidence.materials" class="materials">
-                <strong>Materiales:</strong> {{ report.evidence.materials }}
-              </p>
-              <div class="stats-row">
-                <span class="stat-pill">⏱️ {{ report.evidence.hours_spent }}h dedicadas</span>
-                <span v-if="report.evidence.lat" class="stat-pill">
-                  📍 GPS: {{ report.evidence.lat.toFixed(4) }}, {{ report.evidence.lng.toFixed(4) }}
-                </span>
+        <div class="card-section evidence-meta" v-if="report.evidences && report.evidences.length > 0">
+          <h5 class="section-title">📸 Evidencias Recibidas ({{ report.evidences.length }})</h5>
+          <div class="evidence-gallery">
+            <div v-for="(ev, index) in report.evidences" :key="ev.id" class="evidence-card">
+              <div class="evidence-header">
+                <span class="evidence-tag">{{ index === 0 ? '📍 Llegada' : (index === report.evidences.length - 1 ? '✅ Finalización' : '📸 Intermedio') }}</span>
+                <span class="evidence-time">⏱️ {{ ev.hours_spent }}h</span>
+              </div>
+              <div class="image-wrapper">
+                <img :src="ev.evidence_url" alt="Foto de evidencia" class="evidence-img" />
+              </div>
+              <div class="evidence-details">
+                <p class="desc">{{ ev.description }}</p>
+                <p v-if="ev.materials" class="materials">
+                  <strong>Materiales:</strong> {{ ev.materials }}
+                </p>
               </div>
             </div>
           </div>
@@ -355,24 +353,51 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-.evidence-grid {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 20px;
+.evidence-gallery {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
 }
 
-@media (max-width: 600px) {
-  .evidence-grid {
-    grid-template-columns: 1fr;
-  }
+.evidence-card {
+  flex: 0 0 260px;
+  background: var(--bg-body);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.evidence-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--stroke);
+}
+
+.evidence-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.evidence-time {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .image-wrapper {
   width: 100%;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--stroke);
-  height: 140px;
+  height: 180px;
+  background: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .evidence-img {
@@ -383,6 +408,7 @@ onMounted(() => {
 }
 
 .evidence-details {
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -390,24 +416,17 @@ onMounted(() => {
 
 .evidence-details p {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   line-height: 1.4;
+  color: var(--text-secondary);
 }
 
-.stats-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
-
-.stat-pill {
+.evidence-details .materials {
   font-size: 0.8rem;
-  font-weight: 600;
+  color: var(--text);
   background: var(--bg-subtle);
-  padding: 4px 10px;
-  border-radius: 20px;
-  border: 1px solid var(--stroke);
+  padding: 6px;
+  border-radius: 6px;
 }
 
 .no-evidence {
