@@ -433,8 +433,8 @@ function resetForm() {
             <button v-for="u in urgencyLevels" :key="u.value" type="button" class="urgency-btn" :class="{ selected: form.priority === u.value }" :style="form.priority === u.value ? { borderColor: u.color, background: u.color + '18' } : {}" @click="form.priority = u.value">
               <span class="urgency-dot" :style="{ background: u.color }"></span>
               <div>
-                <strong>{{ u.label }}</strong>
-                <small>{{ u.desc }}</small>
+                <strong :style="form.priority === u.value ? { color: u.color } : {}">{{ u.label }}</strong>
+                <small :style="form.priority === u.value ? { color: u.color, opacity: 0.8 } : {}">{{ u.desc }}</small>
               </div>
             </button>
           </div>
@@ -611,7 +611,7 @@ function resetForm() {
 .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .cat-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 10px; border-radius: 16px; border: 2px solid var(--stroke); background: var(--bg-subtle); cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); color: var(--text); }
 .cat-card:hover { border-color: color-mix(in srgb, var(--primary) 50%, transparent); transform: translateY(-2px); background: var(--card); }
-.cat-card.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 20%, transparent); transform: scale(1.02); }
+.cat-card.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 20%, transparent); transform: scale(1.02); color: var(--primary); }
 .cat-icon { font-size: 2.2rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
 .cat-label { font-size: 0.85rem; font-weight: 700; text-align: center; line-height: 1.2; }
 
