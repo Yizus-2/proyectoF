@@ -1,23 +1,27 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, defineAsyncComponent } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
+import { useReportsStore } from '@/stores/reports'
 import type { Report } from '@/types/report'
 import LeafletMap from '@/components/common/LeafletMap.vue'
 import L from 'leaflet'
 import { useCuadrillaAssignment } from '@/composables/useCuadrillaAssignment'
-import EvidenciaForm from '@/views/operario/EvidenciaForm.vue'
 
-const loading = ref(true)
-const errorMsg = ref('')
-const reports = ref<Report[]>([])
+const EvidenciaForm = defineAsyncComponent(() => import('@/views/operario/EvidenciaForm.vue'))
+
+const reportsStore = useReportsStore()
+const auth = useAuthStore()
+
+const loading = computed(() => reportsStore.loading)
+const errorMsg = computed(() => reportsStore.error || '')
+const reports = computed(() => reportsStore.reports)
+
 const filterStatus = ref('ACTIVOS')
 
 const mapInstance = ref<any>(null)
 const markerLayer = ref<any>(null)
 const zones = ref<any[]>([])
-let realtimeChannel: any = null
-const auth = useAuthStore()
 
 const { assignCrewAutomatically, isAssigning } = useCuadrillaAssignment()
 
@@ -83,30 +87,13 @@ function renderMarkers() {
   })
 }
 
-async function loadReports() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    const { data, error } = await supabase
-      .from('reports')
-      .select('id, tracking_code, status, address, category, created_at, priority, lat, lng, work_order, zone_id, description, is_recurrent, assigned_operator_id')
-      .order('created_at', { ascending: false })
-      .limit(100)
+// Watch filteredReports to update markers reactively
+watch(filteredReports, () => {
+  renderMarkers()
+}, { deep: true })
 
-    if (error) {
-      errorMsg.value = `Error al cargar reportes: ${error.message}`
-      throw error
-    }
-    if (data) {
-      reports.value = data as Report[]
-      renderMarkers()
-    }
-  } catch (e: any) {
-    console.error('Error fetching reports:', e)
-    if (!errorMsg.value) errorMsg.value = e.message || 'Error inesperado.'
-  } finally {
-    loading.value = false
-  }
+async function loadReports() {
+  await reportsStore.fetchReports()
 }
 
 function openManageModal(report: Report) {
@@ -129,7 +116,7 @@ async function triggerAutoAssignment() {
   const crewId = await assignCrewAutomatically(selectedReport.value.id)
   if (crewId) {
     alert('Asignación automática exitosa.')
-    await loadReports()
+    await reportsStore.fetchReports()
     closeModal()
   } else {
     alert('No se encontraron cuadrillas disponibles en la zona geográfica de este reporte.')
@@ -158,7 +145,7 @@ async function saveManagement() {
       
     if (error) throw error
     
-    await loadReports()
+    await reportsStore.fetchReports()
     closeModal()
   } catch (e: any) {
     console.error('Error updating status:', e)
@@ -170,28 +157,13 @@ async function saveManagement() {
 
 function onEvidenceSuccess() {
   alert('Evidencia subida correctamente. El reporte ha sido enviado a verificación por el supervisor.')
-  loadReports()
+  reportsStore.fetchReports()
   closeModal()
-}
-
-function setupRealtime() {
-  realtimeChannel = supabase.channel('public:reports_mgmt')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => {
-      loadReports() 
-    })
-    .subscribe()
 }
 
 onMounted(() => {
   loadZones()
-  loadReports()
-  setupRealtime()
-})
-
-onUnmounted(() => {
-  if (realtimeChannel) {
-    supabase.removeChannel(realtimeChannel)
-  }
+  reportsStore.subscribeToReports()
 })
 
 function formatDate(dateStr: string) {
@@ -334,18 +306,21 @@ function getSlaStatus(report: Report) {
             <div class="field">
               <label>Estado actual</label>
               <select v-model="manageForm.status" required>
-                <!-- Operadores no pueden pasar directo a RESUELTO/CERRADO -->
+                <!-- Operadores no pueden pasar directo a RESUELTO/CERRADO ni a ASIGNADO -->
                 <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
-                <option value="CLASIFICADO">CLASIFICADO</option>
-                <option value="ASIGNADO">ASIGNADO (Enviado a cuadrilla)</option>
-                <option value="EN_PROGRESO">EN PROGRESO (Trabajando)</option>
-                <option value="EVIDENCIA_PENDIENTE" disabled>EVIDENCIA PENDIENTE (Esperando Operario)</option>
-                <option value="VERIFICACION_SUPERVISOR" disabled>VERIFICACIÓN SUPERVISOR (Pendiente Aprobación)</option>
+                <option v-if="auth.isAdmin" value="CLASIFICADO">CLASIFICADO</option>
+                <option v-if="auth.isAdmin" value="ASIGNADO">ASIGNADO (Despachar cuadrilla)</option>
                 
-                <!-- Solo supervisores o admins pueden finalizar o cerrar directo en la bandeja -->
-                <option v-if="auth.isAdmin || auth.isSupervisor" value="RESUELTO">RESUELTO (Finalizado)</option>
-                <option v-if="auth.isAdmin || auth.isSupervisor" value="CERRADO">CERRADO (Archivado)</option>
-                <option value="RECHAZADO">RECHAZADO (Falso/Duplicado)</option>
+                <option v-if="!auth.isAdmin" value="EN_PROGRESO">EN PROGRESO (Trabajando en campo)</option>
+                <option value="EVIDENCIA_PENDIENTE" disabled>EVIDENCIA PENDIENTE</option>
+                <option value="VERIFICACION_SUPERVISOR" disabled>VERIFICACIÓN SUPERVISOR</option>
+                
+                <option v-if="!auth.isAdmin" value="RESUELTO">RESUELTO (Por verificar)</option>
+                
+                <!-- Solo supervisores pueden cerrar -->
+                <option v-if="auth.isSupervisor" value="CERRADO">CERRADO (Archivado)</option>
+                <option v-if="auth.isAdmin" value="RECHAZADO">RECHAZADO (Inválido/Duplicado)</option>
+                <option value="CALIFICADO" disabled>CALIFICADO (Solo el ciudadano califica)</option>
               </select>
             </div>
 
@@ -371,9 +346,9 @@ function getSlaStatus(report: Report) {
               <small>Esto busca la mejor cuadrilla disponible en el sector según carga de trabajo y distancia.</small>
             </div>
 
-            <!-- Subir Evidencia (Operario) -->
-            <div class="field-evidence-trigger" v-if="['EN_PROGRESO', 'ASIGNADO', 'REPORTADO'].includes(selectedReport?.status || '')">
-              <p class="evidence-info-text">Si ya completaste las labores de campo de este reporte, debes registrar las evidencias correspondientes.</p>
+            <!-- Subir Evidencia (SOLO Operario) -->
+            <div class="field-evidence-trigger" v-if="!auth.isAdmin && ['EN_PROGRESO', 'ASIGNADO', 'REPORTADO'].includes(selectedReport?.status || '')">
+              <p class="evidence-info-text">Si completaste las labores, registra la evidencia para pasar a verificación.</p>
               <button type="button" class="btn-primary" @click="showEvidenceForm = true">
                 📷 Registrar Evidencias y Terminar Trabajo
               </button>

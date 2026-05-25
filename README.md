@@ -125,7 +125,8 @@ El apartado de **Indicadores** centraliza toda la gestión operativa y las métr
 | Gráfica | Descripción |
 |---------|-------------|
 | **Tendencia de Reportes (7 días)** | Gráfico de línea que muestra el volumen de ingresos temporales. |
-| **Cumplimiento SLA** | Gráfico de dona (A tiempo vs Riesgo vs Vencido). |
+| **Cumplimiento SLA de Atención** | Gráfico de dona (Porcentaje de reportes resueltos dentro del tiempo objetivo según su nivel de riesgo). |
+| **Reportes por Nivel de Riesgo** | Gráfico de barras (Reportes activos distribuidos por urgencia de atención). |
 | **Canales de Reporte (Barras Horizontales)** | Distribución completa de reportes por medio de recepción, priorizando lectura visual. |
 | **Eficiencia por Zona** | Distribución de cargas y tiempos de respuesta geográficos. |
 | **Gestión de Operaciones** *(pestaña integrada)* | Interfaz de asignación automática de cuadrillas y verificación. |
@@ -142,6 +143,40 @@ La gráfica de Canales de Reporte incluye todos los medios disponibles:
 
 ### Escalas de Riesgo
 Las escalas de respuesta se establecen según nivel de riesgo:
+
+---
+
+### 📝 Plan de Tareas: Clarificar y Rediseñar Gráficas del Dashboard
+*(Agregado según solicitud del stakeholder)*
+
+**Contexto:**
+El usuario final (stakeholder) reportó que la gráfica **"Distribución de Prioridad"** no es comprensible sin explicación adicional. Además, la gráfica de **"Cumplimiento SLA"** carece de contexto sobre qué tipo de actividades se miden.
+
+**Objetivo:**
+Hacer que el dashboard "cuente una historia clara" sin necesidad de explicación verbal. Si una persona externa no entiende un indicador, el dashboard requiere replanteamiento.
+
+**Acciones Requeridas:**
+1. **Gráfica "Distribución de Prioridad" (Rediseñar o Eliminar):**
+   - Definir claramente qué representa cada nivel de prioridad.
+   - Agregar subtítulo explicativo visible en la UI (ej: "Reportes activos por nivel de riesgo").
+   - Considerar cambiar el nombre a "Reportes por Nivel de Riesgo".
+   - Incluir leyenda con descripción breve de cada categoría.
+2. **Gráfica "Cumplimiento SLA" (Agregar Contexto):**
+   - Agregar título completo: "Cumplimiento SLA de Atención de Reportes".
+   - Incluir subtítulo: "Porcentaje de reportes resueltos dentro del tiempo objetivo según su nivel de riesgo".
+   - Agregar tooltip o nota al pie que especifique: "SLA: Crítico <30min, Alto <2h, Medio <8h, Bajo <24h".
+3. **Validación con Usuario Final:**
+   - Presentar mockups o capturas de las gráficas rediseñadas al stakeholder antes de implementar.
+   - Confirmar que la información es autoexplicativa.
+
+**Criterio de Aceptación:**
+- [x] Un usuario externo al proyecto puede interpretar correctamente ambas gráficas sin explicación adicional.
+- [x] Los títulos, subtítulos y leyendas están implementados en el código del dashboard.
+- [x] El feedback del stakeholder está documentado y aprobado.
+
+> "Si una persona externa no entiende los indicadores, el dashboard requiere replanteamiento."
+
+---
 
 | Nivel | Color | Tiempo Máximo de Respuesta | Descripción |
 |-------|-------|---------------------------|-------------|

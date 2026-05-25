@@ -1,45 +1,37 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
-
-const emit = defineEmits<{
-  (e: 'updated'): void
-}>()
+import { useReportsStore } from '@/stores/reports'
 
 const auth = useAuthStore()
-const loading = ref(true)
+const reportsStore = useReportsStore()
+
+const loading = ref(false)
 const errorMessage = ref('')
 const pendingReports = ref<any[]>([])
 const verificationComments = ref<Record<number, string>>({})
 const isSubmitting = ref<Record<number, boolean>>({})
 
-// Load pending reports with status = 'VERIFICACION_SUPERVISOR' and join evidences
-async function loadPending() {
-  loading.value = true
-  errorMessage.value = ''
-  try {
-    const { data, error } = await supabase
-      .from('reports')
-      .select(`
-        id,
-        tracking_code,
-        category,
-        address,
-        priority,
-        created_at,
-        reporter_name,
-        work_order
-      `)
-      .eq('status', 'VERIFICACION_SUPERVISOR')
-      .order('created_at', { ascending: true })
-
-    if (error) throw error
-
-    if (data) {
-      // For each report, load its latest evidence record
+// Watch reportsStore.reports to update pendingReports reactively with their evidence
+watch(
+  () => reportsStore.reports,
+  async (newReports) => {
+    if (!newReports || newReports.length === 0) {
+      pendingReports.value = []
+      return
+    }
+    const supervisorReports = newReports.filter(r => r.status === 'VERIFICACION_SUPERVISOR')
+    
+    loading.value = true
+    try {
       const reportsWithEvidence = await Promise.all(
-        data.map(async (report: any) => {
+        supervisorReports.map(async (report: any) => {
+          const existing = pendingReports.value.find(p => p.id === report.id)
+          if (existing && existing.status === report.status && existing.evidence) {
+            return existing
+          }
+
           const { data: evidenceData, error: evErr } = await supabase
             .from('evidences')
             .select('*')
@@ -55,16 +47,16 @@ async function loadPending() {
           }
         })
       )
-
       pendingReports.value = reportsWithEvidence
+    } catch (err: any) {
+      console.error('Error matching evidence:', err)
+      errorMessage.value = err.message || 'Error al procesar evidencias.'
+    } finally {
+      loading.value = false
     }
-  } catch (err: any) {
-    console.error('Error loading pending verifications:', err)
-    errorMessage.value = err.message || 'Error al cargar verificaciones pendientes.'
-  } finally {
-    loading.value = false
-  }
-}
+  },
+  { immediate: true, deep: true }
+)
 
 async function verify(reportId: number, decision: 'APROBADO' | 'RECHAZADO' | 'REGLAMENTO_PENDIENTE') {
   const comment = (verificationComments.value[reportId] || '').trim()
@@ -108,10 +100,6 @@ async function verify(reportId: number, decision: 'APROBADO' | 'RECHAZADO' | 'RE
 
     // Clear local inputs
     delete verificationComments.value[reportId]
-    
-    // Reload lists
-    await loadPending()
-    emit('updated')
   } catch (err: any) {
     console.error('Error submitting verification:', err)
     alert('Error: ' + (err.message || 'No se pudo guardar la decisión.'))
@@ -122,7 +110,8 @@ async function verify(reportId: number, decision: 'APROBADO' | 'RECHAZADO' | 'RE
 
 onMounted(() => {
   if (auth.isSupervisor || auth.isAdmin) {
-    loadPending()
+    reportsStore.fetchReports()
+    reportsStore.subscribeToReports()
   }
 })
 </script>
@@ -134,7 +123,7 @@ onMounted(() => {
         <h2 class="panel-title">✅ Panel de Verificación de Trabajos</h2>
         <p class="panel-subtitle">Área reservada para supervisores y administradores para auditoría de evidencias en calle.</p>
       </div>
-      <button class="btn-reload" @click="loadPending" :disabled="loading">
+      <button class="btn-reload" @click="reportsStore.fetchReports()" :disabled="loading">
         🔄 Sincronizar
       </button>
     </header>

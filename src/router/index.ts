@@ -34,6 +34,12 @@ const router = createRouter({
       path: '/encuesta/:code',
       name: 'survey',
       component: () => import('@/views/SurveyView.vue')
+    },
+    {
+      path: '/operarios',
+      name: 'operarios',
+      component: () => import('@/views/ManagementOperariosView.vue'),
+      meta: { requiresAuth: true, role: 'admin' }
     }
   ]
 })
@@ -51,6 +57,8 @@ router.beforeEach(async (to, _from, next) => {
 
   if (requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
+  } else if (requiresAuth && requiredRole === 'admin' && !auth.isAdmin) {
+    next({ name: 'dashboard' })
   } else if (requiresAuth && requiredRole === 'operator' && !auth.isOperator) {
     next({ name: 'report' })
   } else if (isLoginPage && auth.isAuthenticated) {

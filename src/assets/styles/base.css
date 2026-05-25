@@ -160,3 +160,10 @@ p {
 .stagger-3 { animation-delay: 0.15s; }
 .stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
+
+
+/* Fix leaflet z-index overlap */
+.leaflet-container {
+  z-index: 10 !important;
+}
+

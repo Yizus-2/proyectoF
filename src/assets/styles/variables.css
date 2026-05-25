@@ -74,8 +74,8 @@
   --stroke: #2e2650;
 
   --text: #f0f0f8;
-  --text-secondary: #b5adcc;
-  --muted: #6b6189;
+  --text-secondary: #d1c9e6; /* Improved contrast */
+  --muted: #9b91b8; /* Improved contrast */
 
   --primary: #a78bfa;
   --primary-light: #c4b5fd;

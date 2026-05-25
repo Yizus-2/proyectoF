@@ -1,35 +1,31 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { useAuthStore } from '@/stores/auth'
+import { useReportsStore } from '@/stores/reports'
 import KpiCard from '@/components/common/KpiCard.vue'
-import GestionView from './GestionView.vue'
-import VerificacionPanel from '../supervisor/VerificacionPanel.vue'
 import { Bar, Doughnut, Line } from 'vue-chartjs'
+
+const GestionView = defineAsyncComponent(() => import('./GestionView.vue'))
+const VerificacionPanel = defineAsyncComponent(() => import('../supervisor/VerificacionPanel.vue'))
 import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement } from 'chart.js'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement)
 
 const activeTab = ref<'analytics' | 'operations' | 'verification'>('analytics')
-const loading = ref(true)
-const errorMsg = ref('')
 const auth = useAuthStore()
+const reportsStore = useReportsStore()
 
-// State for KPIs and Charts
-const kpis = ref({
-  activos: 0,
-  enProgreso: 0,
-  resueltos: 0,
-  tiempoPromedio: 0
-})
-
-const slaStats = ref<any[]>([])
-const channelStats = ref<any[]>([])
-const priorityStats = ref<any[]>([])
-const trendStats = ref<any[]>([])
-const zonesData = ref<any[]>([])
-const recentEvents = ref<any[]>([])
+// Bindings to the centralized store
+const loading = computed(() => reportsStore.loading)
+const errorMsg = computed(() => reportsStore.error || '')
+const kpis = computed(() => reportsStore.kpis)
+const slaStats = computed(() => reportsStore.slaStats)
+const channelStats = computed(() => reportsStore.channelStats)
+const priorityStats = computed(() => reportsStore.priorityStats)
+const trendStats = computed(() => reportsStore.trendStats)
+const zonesData = computed(() => reportsStore.zonesData)
+const recentEvents = computed(() => reportsStore.recentEvents)
 
 const { isDark } = useTheme()
 
@@ -39,131 +35,17 @@ function getThemeColor(variable: string) {
 }
 
 async function loadDashboardData() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    // 1. Fetch reports for KPIs
-    const { data: allReports, error: rError } = await supabase
-      .from('reports')
-      .select('status, source, priority, created_at, resolved_at, zone_id, address, tracking_code')
-
-    if (rError) throw rError
-
-    if (allReports) {
-      // Calculate KPIs
-      const activos = allReports.filter(r => 
-        ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO', 'EVIDENCIA_PENDIENTE', 'VERIFICACION_SUPERVISOR'].includes(r.status)
-      ).length
-
-      const enProgreso = allReports.filter(r => r.status === 'EN_PROGRESO').length
-
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      const resueltos = allReports.filter(r => 
-        ['RESUELTO', 'CERRADO', 'EVALUADO'].includes(r.status) &&
-        r.resolved_at && new Date(r.resolved_at) >= startOfMonth
-      ).length
-
-      // Tiempos de respuesta (SLA)
-      // Si no hay datos, mostramos un promedio ficticio basado en horas transcurridas o un fallback realista
-      const resolvedList = allReports.filter(r => r.resolved_at && r.created_at)
-      let avgTime = 0
-      if (resolvedList.length > 0) {
-        const totalHours = resolvedList.reduce((acc, r) => {
-          const diff = new Date(r.resolved_at!).getTime() - new Date(r.created_at).getTime()
-          return acc + (diff / (1000 * 60 * 60))
-        }, 0)
-        avgTime = Math.round((totalHours / resolvedList.length) * 10) / 10
-      } else {
-        avgTime = 4.2 // Fallback en horas
-      }
-
-      kpis.value = { activos, enProgreso, resueltos, tiempoPromedio: avgTime }
-
-      // 2. SLA Stats (Cumplimiento de Tiempos)
-      // Query the views or calculate locally
-      const { data: slaData } = await supabase.from('reports_sla_status').select('sla_status')
-      const countsSla: any = { 'A TIEMPO': 0, 'RIESGO': 0, 'VENCIDO': 0, 'FINALIZADO': 0 }
-      if (slaData) {
-        slaData.forEach((r: any) => { if (countsSla[r.sla_status] !== undefined) countsSla[r.sla_status]++ })
-      } else {
-        allReports.forEach(r => {
-          if (['CERRADO', 'EVALUADO', 'RESUELTO', 'RECHAZADO'].includes(r.status)) countsSla['FINALIZADO']++
-          else countsSla['A TIEMPO']++ // Simplificado para local
-        })
-      }
-      slaStats.value = Object.entries(countsSla).map(([label, value]) => ({ label, value }))
-
-      // 3. Complete Report Channels
-      const countsChannels: any = {
-        'APP_MOVIL': 0, 'WEB': 0, 'WHATSAPP': 0, 'TELEFONO': 0,
-        'CORREO': 0, 'PRESENCIAL': 0, 'BOTON_EMERGENCIA': 0, 'OFFLINE': 0
-      }
-      allReports.forEach(r => {
-        const src = r.source || 'WEB'
-        if (countsChannels[src] !== undefined) countsChannels[src]++
-      })
-      
-      // Map database keys to human-readable names
-      const channelMapping: any = {
-        'APP_MOVIL': '📱 App Móvil',
-        'WEB': '💻 Portal Web',
-        'WHATSAPP': '💬 WhatsApp',
-        'TELEFONO': '📞 Línea Telefónica',
-        'CORREO': '📧 Correo Electrónico',
-        'PRESENCIAL': '🏢 Oficina Física',
-        'BOTON_EMERGENCIA': '🚨 Botón Emergencia',
-        'OFFLINE': '🔌 Offline/Desconectado'
-      }
-
-      channelStats.value = Object.entries(countsChannels).map(([key, value]) => ({
-        label: channelMapping[key] || key,
-        value
-      }))
-
-      // 4. Priorities (Risk Scale)
-      const countsPriority: any = { 'CRITICA': 0, 'ALTA': 0, 'MEDIA': 0, 'BAJA': 0 }
-      allReports.forEach(r => {
-        if (countsPriority[r.priority] !== undefined) countsPriority[r.priority]++
-      })
-      priorityStats.value = Object.entries(countsPriority).map(([label, value]) => ({ label, value }))
-
-      // 5. Zone efficiency
-      const { data: zData } = await supabase.from('reports_by_zone').select('*')
-      if (zData) {
-        zonesData.value = zData
-      }
-
-      // 6. Tendencia 7 dias
-      const last7Days = [...Array(7)].map((_, i) => {
-        const d = new Date()
-        d.setDate(d.getDate() - i)
-        return d.toISOString().split('T')[0]
-      }).reverse()
-      const tCounts = Object.fromEntries(last7Days.map(d => [d, 0]))
-      allReports.forEach(r => {
-        const date = r.created_at.split('T')[0]
-        if(tCounts[date] !== undefined) tCounts[date]++
-      })
-      trendStats.value = Object.entries(tCounts).map(([date, value]) => {
-        const [, m, d] = date.split('-')
-        return { label: `${d}/${m}`, value }
-      })
-
-      // Recent events
-      recentEvents.value = allReports
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 5)
-    }
-  } catch (err: any) {
-    console.error('Error loading dashboard:', err)
-    errorMsg.value = err.message || 'Error al conectar con la base de datos.'
-  } finally {
-    loading.value = false
-  }
+  await reportsStore.fetchReports()
 }
 
-onMounted(loadDashboardData)
+onMounted(() => {
+  loadDashboardData()
+  reportsStore.subscribeToReports()
+})
+
+onUnmounted(() => {
+  reportsStore.unsubscribe()
+})
 
 // Chart Data Definition
 const complianceChartData = computed(() => {
@@ -361,8 +243,11 @@ const icons = {
           <!-- Gráfico 1: Cumplimiento de Tiempos de Respuesta -->
           <div class="glass-card chart-container">
             <div class="card-header">
-              <h3>⏱️ Cumplimiento SLA</h3>
-              <span class="info-tooltip" title="Clasificación de reportes activos y finalizados según el SLA asignado a su zona.">ℹ️</span>
+              <div class="header-titles">
+                <h3>⏱️ Cumplimiento SLA de Atención</h3>
+                <p class="chart-subtitle">Resueltos dentro del tiempo objetivo según riesgo</p>
+              </div>
+              <span class="info-tooltip" title="SLA: Crítico <30min, Alto <2h, Medio <8h, Bajo <24h">ℹ️</span>
             </div>
             <div class="chart-box">
               <Doughnut :data="complianceChartData" :options="doughnutOptions" />
@@ -372,11 +257,20 @@ const icons = {
           <!-- Gráfico 3: Escalas de Riesgo -->
           <div class="glass-card chart-container">
             <div class="card-header">
-              <h3>⚠️ Distribución por Prioridad</h3>
+              <div class="header-titles">
+                <h3>⚠️ Reportes por Nivel de Riesgo</h3>
+                <p class="chart-subtitle">Reportes activos distribuidos por urgencia de atención</p>
+              </div>
               <span class="info-tooltip" title="Clasificación de incidentes según su nivel de riesgo y urgencia de atención.">ℹ️</span>
             </div>
-            <div class="chart-box">
+            <div class="chart-box" style="height: 220px;">
               <Bar :data="riskChartData" :options="chartOptions" />
+            </div>
+            <div class="mini-legend">
+              <span class="legend-item"><span class="dot red"></span> Crítico (<30m)</span>
+              <span class="legend-item"><span class="dot orange"></span> Alto (<2h)</span>
+              <span class="legend-item"><span class="dot yellow"></span> Medio (<8h)</span>
+              <span class="legend-item"><span class="dot green"></span> Bajo (<24h)</span>
             </div>
           </div>
           
@@ -460,7 +354,7 @@ const icons = {
               <h3>Historial Reciente de Incidencias</h3>
             </div>
             <div class="feed-list">
-              <div v-for="item in recentEvents" :key="item.tracking_code" class="feed-item">
+              <div v-for="item in recentEvents" :key="item.id" class="feed-item">
                 <div class="status-dot" :class="item.status.toLowerCase()"></div>
                 <div class="feed-body">
                   <div class="feed-top">
@@ -486,7 +380,7 @@ const icons = {
     <!-- PESTAÑA 3: VERIFICACIÓN DEL SUPERVISOR -->
     <div v-else-if="activeTab === 'verification'" class="tab-pane">
       <div class="glass-card wrapper-card">
-        <VerificacionPanel @updated="loadDashboardData" />
+        <VerificacionPanel />
       </div>
     </div>
   </main>
@@ -621,6 +515,45 @@ const icons = {
   margin: 0;
   color: var(--text);
 }
+
+.header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart-subtitle {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.mini-legend {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.legend-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.legend-item .dot.red { background: #991b1b; }
+.legend-item .dot.orange { background: #ef4444; }
+.legend-item .dot.yellow { background: #f59e0b; }
+.legend-item .dot.green { background: #10b981; }
 
 .info-tooltip {
   cursor: help;

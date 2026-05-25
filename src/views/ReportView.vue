@@ -2,13 +2,11 @@
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
-import { useOfflineSync } from '@/composables/useOfflineSync'
 import LeafletMap from '@/components/common/LeafletMap.vue'
 import L from 'leaflet'
 import type { Zone } from '@/types/report'
 
 const auth = useAuthStore()
-const { addToQueue } = useOfflineSync()
 const zones = ref<Zone[]>([])
 
 async function loadZones() {
@@ -46,6 +44,7 @@ const form = ref({
   priority: 'BAJA',
   description: '',
   address: '',
+  sector: '',
   zone_id: null as number | null,
   lat: null as number | null,
   lng: null as number | null,
@@ -102,6 +101,21 @@ function updateLocation(lat: number, lng: number) {
   if (!mapInstance.value) return
   if (marker.value) marker.value.setLatLng([lat, lng])
   else marker.value = L.marker([lat, lng]).addTo(mapInstance.value)
+  
+  // Reverse Geocoding automático
+  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.address) {
+        if (!form.value.address) {
+          form.value.address = data.display_name.split(',').slice(0, 2).join(',')
+        }
+        if (!form.value.sector) {
+          form.value.sector = data.address.suburb || data.address.neighbourhood || data.address.city_district || ''
+        }
+      }
+    })
+    .catch(err => console.warn('Reverse geocoding falló', err))
 }
 
 const canProceedStep1 = computed(() => (locationObtained.value || form.value.address.length > 5) && !!form.value.zone_id)
@@ -161,7 +175,7 @@ async function submitReport() {
   errorMessage.value = ''
   try {
     let photoPath = null
-    if (form.value.photoFile && navigator.onLine) {
+    if (form.value.photoFile) {
       // Comprimimos la imagen antes de subirla
       const compressedFile = await compressImage(form.value.photoFile)
       
@@ -181,28 +195,24 @@ async function submitReport() {
       priority: form.value.priority,
       description: form.value.description || null,
       address: form.value.address || 'Ubicación seleccionada en mapa',
+      sector: form.value.sector || null,
       zone_id: form.value.zone_id,
       lat: form.value.lat,
       lng: form.value.lng,
       photo_path: photoPath,
-      source: navigator.onLine ? 'WEB' as const : 'OFFLINE' as const
+      source: 'WEB' as const
     }
-    if (!navigator.onLine) {
-      await addToQueue({ type: 'REPORT', payload })
-      successData.value = { tracking_code: 'Se asignará al sincronizar' }
-    } else {
-      const { data, error } = await supabase.from('reports').insert(payload).select('id, tracking_code').single()
-      if (error) throw error
-      
-      // Trigger automatic crew assignment
-      try {
-        await supabase.rpc('assign_crew_automatically', { p_report_id: data.id })
-      } catch (assignErr) {
-        console.warn('Automatic crew assignment failed on creation:', assignErr)
-      }
+    const { data, error } = await supabase.from('reports').insert(payload).select('id, tracking_code').single()
+    if (error) throw error
+    
+    // Trigger automatic crew assignment
+    try {
+      await supabase.rpc('assign_crew_automatically', { p_report_id: data.id })
+    } catch (assignErr) {
+      console.warn('Automatic crew assignment failed on creation:', assignErr)
+    }
 
-      successData.value = { tracking_code: data?.tracking_code || '—' }
-    }
+    successData.value = { tracking_code: data?.tracking_code || '—' }
   } catch (error: any) {
     errorMessage.value = error.message || 'Error al enviar. Intenta de nuevo.'
     console.error('Submit error:', error)
@@ -215,7 +225,7 @@ function resetForm() {
   step.value = 1
   successData.value = null
   errorMessage.value = ''
-  form.value = { reporter_name: '', reporter_phone: '', reporter_email: '', category: 'fuga_agua', priority: 'BAJA', description: '', address: '', zone_id: null, lat: null, lng: null, photoFile: null }
+  form.value = { reporter_name: '', reporter_phone: '', reporter_email: '', category: 'fuga_agua', priority: 'BAJA', description: '', address: '', sector: '', zone_id: null, lat: null, lng: null, photoFile: null }
   photoPreviewUrl.value = null
   locationObtained.value = false
   if (marker.value && mapInstance.value) { mapInstance.value.removeLayer(marker.value); marker.value = null }
@@ -272,6 +282,10 @@ function resetForm() {
           <div class="field">
             <label for="addr">Dirección o referencia</label>
             <input id="addr" v-model="form.address" type="text" placeholder="Ej: Calle 12 #3-45, frente a la panadería" />
+          </div>
+          <div class="field">
+            <label for="sector">Barrio o Sector (Autocompletado)</label>
+            <input id="sector" v-model="form.sector" type="text" placeholder="Ej: Pescaito, El Rodadero, etc." />
           </div>
           <div class="field" v-if="form.lat && form.lng">
             <label>Coordenadas GPS (Alta Precisión)</label>

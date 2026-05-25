@@ -1,6 +1,6 @@
 export type ReportCategory = 'fuga_agua' | 'fuga_alcantarillado' | 'tuberia_rota' | 'dano_pavimento' | 'dano_infraestructura' | 'otro'
 export type ReportPriority = 'BAJA' | 'MEDIA' | 'ALTA' | 'CRITICA'
-export type ReportStatus = 'REPORTADO' | 'CLASIFICADO' | 'ASIGNADO' | 'EN_PROGRESO' | 'RESUELTO' | 'CERRADO' | 'EVALUADO' | 'RECHAZADO'
+export type ReportStatus = 'REPORTADO' | 'CLASIFICADO' | 'ASIGNADO' | 'EN_PROGRESO' | 'RESUELTO' | 'CERRADO' | 'EVALUADO' | 'RECHAZADO' | 'EVIDENCIA_PENDIENTE' | 'VERIFICACION_SUPERVISOR'
 export type ReportSource = 'WEB' | 'OFFLINE' | 'WHATSAPP'
 
 export interface Zone {

@@ -1,20 +1,32 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import type { Report } from '@/types/report'
 import LeafletMap from '@/components/common/LeafletMap.vue'
 import L from 'leaflet'
+import { 
+  CheckCircleIcon, 
+  ExclamationTriangleIcon, 
+  MapPinIcon, 
+  CalendarIcon, 
+  TagIcon,
+  WrenchScrewdriverIcon,
+  CheckBadgeIcon
+} from '@heroicons/vue/24/outline'
 
 const loading = ref(true)
 const errorMsg = ref('')
 const reports = ref<Report[]>([])
 const filterStatus = ref('ACTIVOS')
+const filterZone = ref<number | null>(null)
 
 const mapInstance = ref<any>(null)
 const markerLayer = ref<any>(null)
 const zones = ref<any[]>([])
+const cuadrillas = ref<any[]>([])
 let realtimeChannel: any = null
+let realtimeCuadrillas: any = null
 const auth = useAuthStore()
 
 async function loadZones() {
@@ -22,14 +34,20 @@ async function loadZones() {
   if (data) zones.value = data
 }
 
+async function loadCuadrillas() {
+  const { data } = await supabase.from('cuadrillas').select('*').order('nombre')
+  if (data) cuadrillas.value = data
+}
+
 // Modal state
 const showModal = ref(false)
 const selectedReport = ref<Report | null>(null)
 const manageForm = ref({
   status: '',
-  work_order: '',
+  cuadrilla_id: '',
   evidenceFile: null as File | null,
-  evidencePreview: null as string | null
+  evidencePreview: null as string | null,
+  isFalseAlarm: false
 })
 const isUpdating = ref(false)
 
@@ -72,13 +90,19 @@ function compressImage(file: File, maxWidth = 1280, quality = 0.8): Promise<File
 }
 
 const filteredReports = computed(() => {
+  let result = reports.value
+
   if (filterStatus.value === 'ACTIVOS') {
-    return reports.value.filter(r => !['CERRADO', 'EVALUADO', 'RECHAZADO'].includes(r.status))
+    result = result.filter(r => !['CERRADO', 'EVALUADO', 'RECHAZADO', 'VERIFICACION_SUPERVISOR'].includes(r.status))
+  } else if (filterStatus.value === 'CERRADOS') {
+    result = result.filter(r => ['CERRADO', 'EVALUADO', 'VERIFICACION_SUPERVISOR'].includes(r.status))
   }
-  if (filterStatus.value === 'CERRADOS') {
-    return reports.value.filter(r => ['CERRADO', 'EVALUADO'].includes(r.status))
+
+  if (filterZone.value) {
+    result = result.filter(r => r.zone_id === filterZone.value)
   }
-  return reports.value
+
+  return result
 })
 
 function handleMapReady(map: any) {
@@ -91,12 +115,17 @@ function renderMarkers() {
   if (!mapInstance.value || !markerLayer.value) return
   markerLayer.value.clearLayers()
   
+  const bounds = L.latLngBounds([])
+
   filteredReports.value.forEach(report => {
     if (report.lat && report.lng) {
+      const latLng = L.latLng(report.lat, report.lng)
+      bounds.extend(latLng)
+
       const isClosed = ['CERRADO', 'EVALUADO', 'RECHAZADO'].includes(report.status)
-      const color = isClosed ? '#64748b' : (report.priority === 'CRITICA' ? '#991b1b' : '#ef5350')
+      const color = isClosed ? '#64748b' : (report.priority === 'CRITICA' ? '#ef4444' : '#f97316')
       
-      const marker = L.circleMarker([report.lat, report.lng], {
+      const marker = L.circleMarker(latLng, {
         radius: 8,
         color: color,
         fillColor: color,
@@ -113,7 +142,15 @@ function renderMarkers() {
       marker.addTo(markerLayer.value)
     }
   })
+
+  if (bounds.isValid() && filteredReports.value.length > 0) {
+    mapInstance.value.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 })
+  }
 }
+
+watch([filterStatus, filterZone], () => {
+  renderMarkers()
+})
 
 async function loadReports() {
   loading.value = true
@@ -121,9 +158,9 @@ async function loadReports() {
   try {
     const { data, error } = await supabase
       .from('reports')
-      .select('id, tracking_code, status, address, category, created_at, priority, lat, lng, work_order')
+      .select('id, tracking_code, status, address, category, created_at, priority, lat, lng, work_order, zone_id')
       .order('created_at', { ascending: false })
-      .limit(100)
+      .limit(200)
 
     if (error) {
       errorMsg.value = `Error al cargar reportes: ${error.message}`
@@ -144,9 +181,10 @@ async function loadReports() {
 function openManageModal(report: Report) {
   selectedReport.value = report
   manageForm.value.status = report.status
-  manageForm.value.work_order = report.work_order || ''
+  manageForm.value.cuadrilla_id = ''
   manageForm.value.evidenceFile = null
   manageForm.value.evidencePreview = null
+  manageForm.value.isFalseAlarm = false
   showModal.value = true
 }
 
@@ -161,7 +199,7 @@ async function saveManagement() {
   try {
     let evidencePath = undefined
 
-    // Si hay foto de evidencia, la comprimimos y la subimos
+    // Si hay foto de evidencia, subirla a Supabase Storage
     if (manageForm.value.evidenceFile) {
       const compressedFile = await compressImage(manageForm.value.evidenceFile)
       const ext = compressedFile.name.split('.').pop() || 'jpg'
@@ -171,25 +209,46 @@ async function saveManagement() {
       evidencePath = filePath
     }
 
-    const payload: any = { 
-      status: manageForm.value.status,
-      work_order: manageForm.value.work_order 
-    }
-    if (evidencePath) payload.evidence_path = evidencePath
-
-    const { error } = await supabase
-      .from('reports')
-      .update(payload)
-      .eq('id', selectedReport.value.id)
+    // Si es admin y está asignando
+    if (auth.isAdmin && manageForm.value.status === 'ASIGNADO' && manageForm.value.cuadrilla_id) {
+      const { error: assignErr } = await supabase.from('asignaciones').insert({
+        reporte_id: selectedReport.value.id,
+        cuadrilla_id: manageForm.value.cuadrilla_id,
+        admin_id: (await supabase.auth.getUser()).data.user?.id
+      })
+      if (assignErr) throw assignErr
       
-    if (error) throw error
-    
-    // Optimistic update
-    const index = reports.value.findIndex(r => r.id === selectedReport.value!.id)
-    if (index !== -1) {
-      reports.value[index].status = manageForm.value.status as Report['status']
-      reports.value[index].work_order = manageForm.value.work_order
+      const cuadrillaNombre = cuadrillas.value.find(c => c.id === manageForm.value.cuadrilla_id)?.nombre || 'Cuadrilla'
+      await supabase.from('reports').update({ status: 'ASIGNADO', work_order: cuadrillaNombre }).eq('id', selectedReport.value.id)
+    } 
+    // Si es cuadrilla enviando evidencia
+    else if (evidencePath) {
+      let tipoEvidencia = 'EN_PROGRESO'
+      if (manageForm.value.status === 'RESUELTO') tipoEvidencia = 'FINALIZADO'
+      if (manageForm.value.isFalseAlarm) tipoEvidencia = 'FALSO_AVISO'
+
+      const { error: evErr } = await supabase.from('evidencias').insert({
+        reporte_id: selectedReport.value.id,
+        tipo: tipoEvidencia,
+        url_archivo: evidencePath
+      })
+      if (evErr) throw evErr
+
+      // Actualizamos reporte según la lógica
+      let nextStatus = manageForm.value.status
+      if (tipoEvidencia === 'FALSO_AVISO' || tipoEvidencia === 'FINALIZADO') {
+        nextStatus = 'VERIFICACION_SUPERVISOR'
+      }
+
+      await supabase.from('reports').update({ status: nextStatus }).eq('id', selectedReport.value.id)
+    } 
+    // Otros casos generales
+    else {
+      await supabase.from('reports').update({ status: manageForm.value.status }).eq('id', selectedReport.value.id)
     }
+    
+    await loadReports()
+    await loadCuadrillas()
     closeModal()
   } catch (e: any) {
     console.error('Error updating status:', e)
@@ -201,23 +260,26 @@ async function saveManagement() {
 
 function setupRealtime() {
   realtimeChannel = supabase.channel('public:reports')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, payload => {
-      console.log('Cambio detectado:', payload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => {
       loadReports() 
-    })
-    .subscribe()
+    }).subscribe()
+
+  realtimeCuadrillas = supabase.channel('public:cuadrillas')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'cuadrillas' }, () => {
+      loadCuadrillas()
+    }).subscribe()
 }
 
 onMounted(() => {
   loadZones()
+  loadCuadrillas()
   loadReports()
   setupRealtime()
 })
 
 onUnmounted(() => {
-  if (realtimeChannel) {
-    supabase.removeChannel(realtimeChannel)
-  }
+  if (realtimeChannel) supabase.removeChannel(realtimeChannel)
+  if (realtimeCuadrillas) supabase.removeChannel(realtimeCuadrillas)
 })
 
 function formatDate(dateStr: string) {
@@ -236,7 +298,9 @@ function getPriorityColor(priority: string) {
 }
 
 function getSlaStatus(report: Report) {
-  if (['CERRADO', 'EVALUADO', 'RESUELTO', 'RECHAZADO'].includes(report.status)) return { label: 'Finalizado', class: 'sla--done' }
+  if (['CERRADO', 'EVALUADO', 'RESUELTO', 'RECHAZADO', 'VERIFICACION_SUPERVISOR'].includes(report.status)) {
+    return { label: 'Finalizado', class: 'sla--done' }
+  }
   
   const zone = zones.value.find(z => z.id === report.zone_id)
   if (!zone) return { label: 'Sin SLA', class: 'sla--none' }
@@ -252,143 +316,202 @@ function getSlaStatus(report: Report) {
   <main class="management-view">
     <header class="page-header">
       <div>
-        <h1 class="page-title">Bandeja de Gestión</h1>
-        <p class="page-subtitle">Panel de operadores para asignación y resolución de reportes.</p>
+        <h1 class="page-title">Operaciones y Despacho</h1>
+        <p class="page-subtitle">Panel para asignación visual, cuadrillas en campo y seguimiento territorial.</p>
       </div>
       
-      <div class="filter-group">
-        <button class="filter-btn" :class="{ active: filterStatus === 'ACTIVOS' }" @click="filterStatus = 'ACTIVOS'">Activos</button>
-        <button class="filter-btn" :class="{ active: filterStatus === 'CERRADOS' }" @click="filterStatus = 'CERRADOS'">Cerrados</button>
-        <button class="filter-btn" :class="{ active: filterStatus === 'TODOS' }" @click="filterStatus = 'TODOS'">Todos</button>
+      <div class="filters-container">
+        <div class="zone-filter">
+          <MapPinIcon class="w-5 h-5 text-muted" />
+          <select v-model="filterZone">
+            <option :value="null">Todas las Zonas</option>
+            <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.name }}</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <button class="filter-btn" :class="{ active: filterStatus === 'ACTIVOS' }" @click="filterStatus = 'ACTIVOS'">Activos</button>
+          <button class="filter-btn" :class="{ active: filterStatus === 'CERRADOS' }" @click="filterStatus = 'CERRADOS'">Verificación/Cerrados</button>
+          <button class="filter-btn" :class="{ active: filterStatus === 'TODOS' }" @click="filterStatus = 'TODOS'">Todos</button>
+        </div>
       </div>
     </header>
 
-    <div class="content-split">
-      <!-- Mapa SIEMPRE ARRIBA -->
+    <div class="top-layout">
+      <!-- Mapa SIEMPRE ARRIBA Y A LA IZQUIERDA -->
       <div class="map-section">
         <LeafletMap class="leaflet-host" @ready="handleMapReady" />
         <div class="map-overlay">
           <div class="overlay-stat">
             <span class="dot warning"></span>
-            <strong>{{ reports.filter(r => !['CERRADO', 'EVALUADO'].includes(r.status)).length }}</strong> Activos
-          </div>
-          <div class="overlay-stat">
-            <span class="dot success"></span>
-            <strong>{{ reports.filter(r => ['CERRADO', 'EVALUADO'].includes(r.status)).length }}</strong> Resueltos
+            <strong>{{ reports.filter(r => !['CERRADO', 'EVALUADO', 'VERIFICACION_SUPERVISOR'].includes(r.status)).length }}</strong> Activos
           </div>
         </div>
       </div>
 
-      <!-- Lista DEBAJO DEL MAPA -->
-      <div class="list-section">
-        <div v-if="loading && reports.length === 0" class="loading-state">
-          <div class="spinner"></div>
-          <p>Cargando reportes...</p>
+      <!-- Panel de Cuadrillas a la DERECHA -->
+      <div class="crews-panel glass-card">
+        <div class="panel-header">
+          <WrenchScrewdriverIcon class="w-6 h-6 text-primary" />
+          <h3>Disponibilidad de Cuadrillas</h3>
         </div>
-
-        <div v-else-if="errorMsg && reports.length === 0" class="loading-state" style="color: #ef4444;">
-          <p>⚠️ {{ errorMsg }}</p>
-          <button class="filter-btn active" style="margin-top: 12px;" @click="loadReports">Reintentar</button>
-        </div>
-
-        <div v-else-if="filteredReports.length === 0" class="empty-state">
-          <div class="empty-icon">✓</div>
-          <h3>Todo al día</h3>
-          <p>No hay reportes que coincidan con tu filtro.</p>
-        </div>
-
-        <div v-else class="reports-grid">
-          <article v-for="report in filteredReports" :key="report.id" class="report-card">
-            <div class="card-header">
-              <span class="tracking-code">{{ report.tracking_code || `#${report.id}` }}</span>
-              <div class="badges">
-                <span class="badge" :class="getSlaStatus(report).class">{{ getSlaStatus(report).label }}</span>
-                <span class="badge" :class="getPriorityColor(report.priority)">{{ report.priority }}</span>
-                <span class="badge badge--outline" v-if="report.is_recurrent">REINCIDENTE</span>
-              </div>
+        <div class="crews-list">
+          <div v-if="cuadrillas.length === 0" class="loading-state-sm">
+            Cargando cuadrillas...
+          </div>
+          
+          <div 
+            v-for="c in cuadrillas" 
+            :key="c.id" 
+            class="crew-item"
+            :class="{ 'crew-full': c.casos_activos >= c.casos_maximos }"
+          >
+            <div class="crew-info">
+              <span class="crew-name">{{ c.nombre }}</span>
+              <span class="crew-status" :class="c.casos_activos >= c.casos_maximos ? 'text-danger' : (c.casos_activos > 0 ? 'text-warning' : 'text-success')">
+                {{ c.casos_activos >= c.casos_maximos ? 'Ocupada' : 'Disponible' }}
+              </span>
             </div>
-            
-            <div class="card-body">
-              <h3 class="report-address">{{ report.address }}</h3>
-              <p class="report-desc">{{ report.description || 'Sin descripción adicional.' }}</p>
-              
-              <div class="meta-info">
-                <div class="meta-item" title="Categoría">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                  <span>{{ report.category.replace('_', ' ') }}</span>
-                </div>
-                <div class="meta-item ml-auto" title="Fecha de reporte">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span>{{ formatDate(report.created_at) }}</span>
+            <div class="crew-load">
+              <span class="load-text">{{ c.casos_activos }} / {{ c.casos_maximos }} Casos</span>
+              <div class="load-bar-track">
+                <div class="load-bar-fill" 
+                     :class="c.casos_activos >= c.casos_maximos ? 'bg-danger' : 'bg-primary'"
+                     :style="{ width: `${(c.casos_activos / c.casos_maximos) * 100}%` }">
                 </div>
               </div>
-
-              <div v-if="report.work_order" class="work-order-badge">
-                <strong>Cuadrilla:</strong> {{ report.work_order }}
-              </div>
             </div>
-            
-            <div class="card-footer">
-              <button 
-                v-if="auth.isAdmin || !['RESUELTO', 'CERRADO', 'RECHAZADO', 'EVALUADO'].includes(report.status)"
-                class="btn-manage" 
-                @click="openManageModal(report)"
-              >
-                Gestionar Reporte
-                <span class="status-indicator">{{ report.status }}</span>
-              </button>
-              <div v-else class="btn-manage" style="cursor: not-allowed; opacity: 0.7; background: var(--bg-subtle);">
-                Reporte Bloqueado (Final)
-                <span class="status-indicator" style="background: transparent; color: var(--text);">{{ report.status }}</span>
-              </div>
-            </div>
-          </article>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Lista DEBAJO DEL MAPA -->
+    <div class="list-section">
+      <div class="section-title">
+        <h3>Incidentes Filtrados</h3>
+      </div>
+      
+      <div v-if="loading && reports.length === 0" class="loading-state">
+        <div class="spinner"></div>
+        <p>Cargando reportes operacionales...</p>
+      </div>
+
+      <div v-else-if="errorMsg && reports.length === 0" class="loading-state text-danger">
+        <ExclamationTriangleIcon class="w-12 h-12 mb-4" />
+        <p>{{ errorMsg }}</p>
+        <button class="filter-btn active mt-3" @click="loadReports">Reintentar</button>
+      </div>
+
+      <div v-else-if="filteredReports.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <CheckCircleIcon class="w-10 h-10" />
+        </div>
+        <h3>Todo al día en esta vista</h3>
+        <p>No hay reportes que coincidan con tu filtro actual.</p>
+      </div>
+
+      <div v-else class="reports-grid">
+        <article v-for="report in filteredReports" :key="report.id" class="report-card">
+          <div class="card-header">
+            <span class="tracking-code">{{ report.tracking_code || `#${report.id}` }}</span>
+            <div class="badges">
+              <span class="badge" :class="getSlaStatus(report).class">{{ getSlaStatus(report).label }}</span>
+              <span class="badge" :class="getPriorityColor(report.priority)">{{ report.priority }}</span>
+            </div>
+          </div>
+          
+          <div class="card-body">
+            <h3 class="report-address">{{ report.address }}</h3>
+            <p class="report-desc">{{ report.description || 'Sin descripción adicional.' }}</p>
+            
+            <div class="meta-info">
+              <div class="meta-item" title="Categoría">
+                <TagIcon class="w-4 h-4" />
+                <span>{{ report.category.replace('_', ' ') }}</span>
+              </div>
+              <div class="meta-item ml-auto" title="Fecha de reporte">
+                <CalendarIcon class="w-4 h-4" />
+                <span>{{ formatDate(report.created_at) }}</span>
+              </div>
+            </div>
+
+            <div v-if="report.work_order" class="work-order-badge">
+              <strong>Asignado a:</strong> {{ report.work_order }}
+            </div>
+          </div>
+          
+          <div class="card-footer">
+            <button 
+              v-if="auth.isAdmin || auth.isOperator"
+              class="btn-manage" 
+              @click="openManageModal(report)"
+            >
+              Gestionar Caso
+              <span class="status-indicator">{{ report.status.replace('_', ' ') }}</span>
+            </button>
+          </div>
+        </article>
       </div>
     </div>
 
     <!-- Modal de Gestión -->
     <div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
       <div class="modal-content">
-        <h2>Gestionar Reporte</h2>
+        <h2>Gestionar Incidente</h2>
         <p class="modal-subtitle">{{ selectedReport?.tracking_code }} - {{ selectedReport?.address }}</p>
         
         <form @submit.prevent="saveManagement" class="modal-form">
+          
           <div class="field">
-            <label>Estado actual</label>
+            <label>Estado Operativo</label>
             <select v-model="manageForm.status" required>
               <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
-              <option value="ASIGNADO">ASIGNADO (Enviado a cuadrilla)</option>
-              <option value="EN_PROGRESO">EN PROGRESO (Trabajando)</option>
-              <option value="RESUELTO">RESUELTO (Finalizado)</option>
-              <option v-if="auth.isAdmin" value="CERRADO">CERRADO (Archivado/Auditoria)</option>
-              <option value="RECHAZADO">RECHAZADO (Falso/Duplicado)</option>
+              <option v-if="auth.isAdmin" value="ASIGNADO">ASIGNADO (Despachar Cuadrilla)</option>
+              <option value="EN_PROGRESO">LLEGADA A SITIO / EN PROGRESO</option>
+              <option value="RESUELTO">FINALIZAR CASO (Requiere Verificación)</option>
             </select>
           </div>
 
-          <div class="field" v-if="['EN_PROGRESO', 'RESUELTO', 'RECHAZADO'].includes(manageForm.status) && auth.isOperator">
-            <label>Evidencia fotográfica del operador</label>
-            <label for="evidence" class="upload-area">
-              <span v-if="!manageForm.evidencePreview">📷 Subir foto de respaldo</span>
-              <img v-else :src="manageForm.evidencePreview" alt="preview" class="preview-img" />
-            </label>
-            <input id="evidence" type="file" accept="image/*" class="sr-only" @change="onEvidenceSelected" />
+          <!-- Solo para admins: Asignación a cuadrillas -->
+          <div v-if="auth.isAdmin && manageForm.status === 'ASIGNADO'" class="field assign-box">
+            <label>Despachar a Cuadrilla Disponible</label>
+            <select v-model="manageForm.cuadrilla_id" required>
+              <option value="" disabled>Seleccione una cuadrilla...</option>
+              <option 
+                v-for="c in cuadrillas" 
+                :key="c.id" 
+                :value="c.id"
+                :disabled="c.casos_activos >= c.casos_maximos"
+              >
+                {{ c.nombre }} ({{ c.casos_activos }}/{{ c.casos_maximos }} Casos)
+              </option>
+            </select>
+            <small>Las cuadrillas con 3/3 casos están ocupadas y deshabilitadas.</small>
           </div>
 
-          <div class="field">
-            <label>Cuadrilla o Grupo Asignado</label>
-            <input 
-              v-model="manageForm.work_order" 
-              type="text" 
-              placeholder="Ej: Cuadrilla Alfa - Camión 4" 
-            />
-            <small>Esto nos permite saber quién está a cargo de esta orden.</small>
+          <!-- Evidencias para Cuadrillas (Admins no suben fotos) -->
+          <div class="field" v-if="!auth.isAdmin && ['EN_PROGRESO', 'RESUELTO'].includes(manageForm.status)">
+            <label>Evidencia Fotográfica del Sitio</label>
+            <label for="evidence" class="upload-area">
+              <span v-if="!manageForm.evidencePreview">📷 Tomar Foto / Subir Respaldo</span>
+              <img v-else :src="manageForm.evidencePreview" alt="preview" class="preview-img" />
+            </label>
+            <input id="evidence" type="file" accept="image/*" class="sr-only" @change="onEvidenceSelected" required />
+          </div>
+
+          <!-- Marca de Falso Aviso -->
+          <div class="field checkbox-field" v-if="manageForm.status === 'RESUELTO'">
+            <label class="check-label">
+              <input type="checkbox" v-model="manageForm.isFalseAlarm" />
+              Marcar como Falso Aviso / No hay daño
+            </label>
           </div>
 
           <div class="modal-actions">
             <button type="button" class="btn-ghost" @click="closeModal" :disabled="isUpdating">Cancelar</button>
             <button type="submit" class="btn-primary" :disabled="isUpdating">
-              {{ isUpdating ? 'Guardando...' : 'Guardar Cambios' }}
+              {{ isUpdating ? 'Procesando...' : 'Confirmar Gestión' }}
             </button>
           </div>
         </form>
@@ -398,357 +521,122 @@ function getSlaStatus(report: Report) {
 </template>
 
 <style scoped>
-.management-view {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
-}
+.management-view { padding: 24px; max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; }
+.page-title { margin: 0 0 8px 0; font-size: 2rem; font-weight: 800; color: var(--text); }
+.page-subtitle { margin: 0; color: var(--muted); }
+.filters-container { display: flex; gap: 16px; flex-wrap: wrap; }
+.zone-filter { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--stroke); border-radius: 12px; padding: 4px 12px; }
+.zone-filter select { background: transparent; border: none; outline: none; color: var(--text); font-weight: 600; cursor: pointer; }
+.text-muted { color: var(--muted); }
+.text-primary { color: var(--primary); }
+.w-6 { width: 1.5rem; } .h-6 { height: 1.5rem; }
+.w-5 { width: 1.25rem; } .h-5 { height: 1.25rem; }
+.w-4 { width: 1rem; } .h-4 { height: 1rem; }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 32px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
+.filter-group { display: flex; background: var(--card); border: 1px solid var(--stroke); border-radius: 12px; padding: 4px; }
+.filter-btn { background: transparent; border: none; padding: 8px 16px; border-radius: 8px; color: var(--muted); font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
+.filter-btn.active { background: var(--bg-subtle); color: var(--text); box-shadow: var(--shadow-sm); }
 
-.page-title {
-  margin: 0 0 8px 0;
-  font-size: 2rem;
-  font-weight: 800;
-}
+.top-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
 
-.page-subtitle {
-  margin: 0;
-  color: var(--muted);
-}
-
-.filter-group {
-  display: flex;
-  background: var(--card);
-  border: 1px solid var(--stroke);
-  border-radius: 12px;
-  padding: 4px;
-}
-
-.filter-btn {
-  background: transparent;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  color: var(--muted);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-btn.active {
-  background: var(--bg-subtle);
-  color: var(--text);
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-
-.content-split {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.map-section {
-  position: relative;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--stroke);
-  height: 400px;
-  width: 100%;
-}
-
-.map-overlay {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1000;
-  background: var(--card);
-  opacity: 0.9;
-  backdrop-filter: blur(8px);
-  padding: 12px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--stroke);
-  display: flex;
-  gap: 20px;
-  box-shadow: var(--shadow-md);
-}
-
-.overlay-stat {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
+.map-section { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid var(--stroke); height: 500px; width: 100%; z-index: 10; }
+.map-overlay { position: absolute; top: 16px; right: 16px; z-index: 1000; background: var(--card); opacity: 0.95; backdrop-filter: blur(8px); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--stroke); display: flex; gap: 20px; box-shadow: var(--shadow-md); }
+.overlay-stat { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot.warning { background: var(--warning); }
-.dot.success { background: var(--accent); }
+.dot.success { background: var(--success); }
+.leaflet-host { width: 100%; height: 100%; }
 
-.leaflet-host {
-  width: 100%;
-  height: 100%;
-}
+/* Panel de Cuadrillas */
+.crews-panel { background: var(--card); border: 1px solid var(--stroke); border-radius: 16px; display: flex; flex-direction: column; height: 500px; overflow: hidden; }
+.panel-header { padding: 20px; border-bottom: 1px solid var(--stroke); display: flex; align-items: center; gap: 12px; background: var(--bg-subtle); }
+.panel-header h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text); }
+.crews-list { flex-grow: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.crew-item { background: var(--bg-subtle); border-radius: 12px; padding: 16px; border: 1px solid var(--stroke); transition: transform 0.2s; }
+.crew-full { opacity: 0.6; filter: grayscale(0.5); }
+.crew-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.crew-name { font-weight: 700; font-size: 0.95rem; color: var(--text); }
+.crew-status { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
+.crew-load { display: flex; flex-direction: column; gap: 6px; }
+.load-text { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.load-bar-track { width: 100%; height: 8px; background: var(--stroke); border-radius: 4px; overflow: hidden; }
+.load-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+.bg-primary { background-color: var(--primary); }
+.bg-danger { background-color: var(--danger); }
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
 
-.reports-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
-}
+.list-section { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.section-title h3 { margin: 0; font-size: 1.4rem; font-weight: 800; }
 
-.report-card {
-  background: var(--card);
-  border: 1px solid var(--stroke);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.report-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0,0,0,0.05);
-}
-
-.card-header {
-  padding: 16px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  border-bottom: 1px solid var(--bg-subtle);
-}
-
-.badges {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.badge {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.badge--critical { background: #991b1b; color: white; }
+.reports-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+.report-card { background: var(--card); border: 1px solid var(--stroke); border-radius: 16px; display: flex; flex-direction: column; transition: transform 0.2s ease; }
+.report-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.card-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--stroke); }
+.badges { display: flex; gap: 8px; flex-wrap: wrap; }
+.badge { font-size: 0.75rem; font-weight: 700; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; }
+.badge--critical { background: #ef4444; color: white; }
 .badge--danger { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
 .badge--warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
 .badge--neutral { background: var(--bg-subtle); color: var(--muted); }
-.badge--outline { background: transparent; border: 1px solid var(--stroke); color: var(--text-secondary); }
 
-/* SLA Badges */
 .sla--done { background: #10b981; color: white; }
-.sla--expired { background: #ef4444; color: white; animation: pulse 2s infinite; }
+.sla--expired { background: #ef4444; color: white; }
 .sla--warning { background: #f59e0b; color: white; }
 .sla--ok { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; }
-.sla--none { background: #64748b; color: white; }
 
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  100% { transform: scale(1); }
-}
-
-.tracking-code {
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-family: monospace;
-  background: var(--bg-subtle);
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-
-.card-body {
-  padding: 20px;
-  flex-grow: 1;
-}
-
-.report-address {
-  margin: 0 0 8px 0;
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.report-desc {
-  margin: 0 0 16px 0;
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.meta-info {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+.tracking-code { font-size: 0.85rem; color: var(--muted); font-family: monospace; background: var(--bg-subtle); padding: 4px 8px; border-radius: 6px; }
+.card-body { padding: 20px; flex-grow: 1; }
+.report-address { margin: 0 0 8px 0; font-size: 1.1rem; font-weight: 700; }
+.report-desc { margin: 0 0 16px 0; font-size: 0.95rem; color: var(--text-secondary); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.meta-info { display: flex; gap: 16px; align-items: center; font-size: 0.85rem; color: var(--muted); }
+.meta-item { display: flex; align-items: center; gap: 6px; }
 .ml-auto { margin-left: auto; }
+.work-order-badge { margin-top: 14px; padding: 8px 12px; background: var(--primary-soft); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 8px; font-size: 0.85rem; color: var(--text); font-weight: 600; }
+.card-footer { padding: 16px 20px; background: var(--bg-subtle); border-top: 1px solid var(--stroke); border-radius: 0 0 16px 16px; }
+.btn-manage { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--stroke); background: var(--card); color: var(--text); font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
+.btn-manage:hover { border-color: var(--primary); }
+.status-indicator { font-size: 0.7rem; padding: 4px 8px; background: var(--stroke); border-radius: 12px; font-weight: 700; }
 
-.work-order-badge {
-  margin-top: 14px;
-  padding: 8px 12px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--stroke);
-  border-radius: 8px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.card-footer {
-  padding: 16px 20px;
-  background: var(--bg-subtle);
-  border-top: 1px solid var(--stroke);
-  border-radius: 0 0 16px 16px;
-}
-
-.btn-manage {
-  width: 100%;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--stroke);
-  background: var(--card);
-  color: var(--text);
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: all 0.2s;
-}
-
-.btn-manage:hover {
-  border-color: var(--primary);
-  background: var(--bg-subtle);
-}
-
-.status-indicator {
-  font-size: 0.75rem;
-  padding: 2px 8px;
-  background: var(--stroke);
-  border-radius: 12px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-
-.loading-state, .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--muted);
-  background: var(--card);
-  border-radius: 20px;
-  border: 1px solid var(--stroke);
-}
-
-.empty-icon {
-  width: 60px;
-  height: 60px;
-  background: var(--bg-subtle);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: var(--primary);
-  margin-bottom: 16px;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(0,0,0,0.1);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 1s infinite linear;
-  margin-bottom: 16px;
-}
+.loading-state, .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: var(--muted); background: var(--card); border-radius: 20px; border: 1px solid var(--stroke); }
+.empty-icon { color: var(--primary); margin-bottom: 16px; }
+.spinner { width: 40px; height: 40px; border: 3px solid rgba(0,0,0,0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s infinite linear; margin-bottom: 16px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Modal */
-.modal-backdrop {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-content {
-  background: var(--card);
-  border-radius: 20px;
-  padding: 32px;
-  width: 100%;
-  max-width: 480px;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-}
-
-.modal-content h2 { margin: 0 0 4px; font-size: 1.4rem; }
+.modal-backdrop { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal-content { background: var(--card); border-radius: 20px; padding: 32px; width: 100%; max-width: 480px; box-shadow: var(--shadow-lg); border: 1px solid var(--stroke); }
+.modal-content h2 { margin: 0 0 4px; font-size: 1.4rem; color: var(--text); }
 .modal-subtitle { color: var(--muted); margin: 0 0 24px; font-size: 0.9rem; }
-
 .modal-form { display: flex; flex-direction: column; gap: 20px; }
-
 .upload-area { display:flex; align-items:center; justify-content:center; min-height:100px; border:2px dashed var(--stroke); border-radius:12px; cursor:pointer; background:var(--bg-subtle); font-weight:600; color:var(--muted); transition:all .2s; overflow:hidden; }
 .upload-area:hover { border-color:var(--primary); color:var(--primary); }
 .preview-img { width:100%; height:160px; object-fit:cover; }
 .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
-
 .field { display: flex; flex-direction: column; gap: 8px; }
-.field label { font-weight: 600; font-size: 0.95rem; }
-.field select, .field input {
-  padding: 12px; border-radius: 10px; border: 1px solid var(--stroke);
-  background: var(--bg-subtle); font-family: inherit; font-size: 1rem; color: var(--text);
-}
-.field select:focus, .field input:focus { outline: none; border-color: var(--primary); }
-.field small { color: var(--muted); font-size: 0.8rem; }
-
-.modal-actions {
-  display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px;
-}
-
+.field label { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+.field select, .field input { padding: 12px; border-radius: 10px; border: 1px solid var(--stroke); background: var(--bg-subtle); color: var(--text); outline: none; }
+.field select:focus { border-color: var(--primary); }
+.assign-box { padding: 16px; background: var(--primary-soft); border-radius: 12px; border: 1px solid rgba(167, 139, 250, 0.2); }
+.assign-box label { color: var(--primary); }
+.checkbox-field { flex-direction: row; align-items: center; }
+.check-label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-secondary); font-weight: 500; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 .btn-ghost { padding: 10px 16px; border: none; background: transparent; font-weight: 600; cursor: pointer; color: var(--muted); }
 .btn-ghost:hover { color: var(--text); }
 .btn-primary { padding: 10px 20px; border-radius: 10px; border: none; background: var(--primary); color: white; font-weight: 700; cursor: pointer; }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+@media (max-width: 1024px) {
+  .top-layout { grid-template-columns: 1fr; }
+  .map-section { height: 350px; }
+  .crews-panel { height: 350px; }
+}
 @media (max-width: 600px) {
   .management-view { padding: 16px; }
   .page-header { flex-direction: column; align-items: stretch; }
-  .filter-group { width: 100%; }
-  .filter-btn { flex: 1; text-align: center; font-size: .85rem; }
-  .map-section { height: 280px; }
-  .reports-grid { grid-template-columns: 1fr; }
+  .filters-container { flex-direction: column; }
 }
 </style>
