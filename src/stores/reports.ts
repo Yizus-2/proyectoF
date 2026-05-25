@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/lib/supabase'
 import type { Report } from '@/types/report'
+import { useToastStore } from '@/stores/toast'
 
 export const useReportsStore = defineStore('reports', () => {
   const reports = ref<Report[]>([])
@@ -60,8 +61,22 @@ export const useReportsStore = defineStore('reports', () => {
     if (realtimeChannel) return
     realtimeChannel = supabase
       .channel('public:reports_store')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, (payload) => {
         fetchReports()
+        
+        // Disparar toast para nuevos reportes críticos
+        if (payload.eventType === 'INSERT') {
+          const newReport = payload.new as Report
+          if (newReport.priority === 'CRITICA') {
+            const toastStore = useToastStore()
+            toastStore.addToast({
+              title: '¡Nuevo Reporte Crítico!',
+              message: `PQR: ${newReport.tracking_code} - ${newReport.category.replace('_', ' ')}. Requiere atención inmediata.`,
+              type: 'error',
+              duration: 10000 // 10s para críticos
+            })
+          }
+        }
       })
       .subscribe()
   }
