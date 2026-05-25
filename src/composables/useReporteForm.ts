@@ -114,23 +114,33 @@ export function useReporteForm() {
 
     // Mapear al esquema de la base de datos reports
     const payload = {
+      reporter_id: auth.user?.id || null,
+      reporter_name: state.value.paso3.nombre || 'Ciudadano Anónimo',
+      reporter_phone: state.value.paso3.telefono || null,
+      reporter_email: state.value.paso3.email || null,
       category: state.value.paso1.tipo, // 'fuga', 'presion', etc
       priority: state.value.paso1.urgenciaUsuario?.toUpperCase(), // 'CRITICA', 'ALTA', etc
       description: state.value.paso1.descripcion,
-      address: state.value.paso2.direccion,
+      address: state.value.paso2.direccion || 'Ubicación seleccionada en mapa',
       zone_id: zoneId,
       lat: state.value.paso2.latitud,
       lng: state.value.paso2.longitud,
-      reporter_name: state.value.paso3.nombre,
-      reporter_phone: state.value.paso3.telefono,
-      reporter_email: state.value.paso3.email || null,
-      status: 'ACTIVO',
-      reported_by_id: auth.user?.id || null
-      // tracking_code se asume que lo genera un trigger en la BD o lo podemos generar si fuera necesario
+      source: 'WEB'
     }
 
-    const { error } = await supabase.from('reports').insert(payload)
+    const { data, error } = await supabase.from('reports').insert(payload).select('id, tracking_code').single()
     if (error) throw error
+
+    // Disparar asignación automática (como en la versión antigua)
+    try {
+      if (data && data.id) {
+        await supabase.rpc('assign_crew_automatically', { p_report_id: data.id })
+      }
+    } catch (assignErr) {
+      console.warn('Asignación automática falló:', assignErr)
+    }
+
+    return data?.tracking_code
   }
 
   function getPayloadFormateado() {

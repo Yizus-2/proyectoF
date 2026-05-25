@@ -19,6 +19,7 @@ const canales = [
 const showModal = ref(false)
 const isSubmitting = ref(false)
 const isSuccess = ref(false)
+const trackingCode = ref<string>('')
 
 function onInputPhone(e: Event) {
   const input = e.target as HTMLInputElement
@@ -34,21 +35,20 @@ function onInputPhone(e: Event) {
 async function handleConfirm() {
   isSubmitting.value = true
   try {
-    await enviarReporte()
+    const code = await enviarReporte()
+    trackingCode.value = code || '—'
     isSuccess.value = true
     showModal.value = false
-    // Emitir o resetear dependiendo de lo que quiera el sistema
-    setTimeout(() => {
-      // resetearFormulario()
-      // En un flujo real redirigimos a la bandeja o mostramos success state.
-      alert('Reporte enviado correctamente.')
-      window.location.reload()
-    }, 1500)
   } catch (error: any) {
     alert('Error al enviar: ' + error.message)
     isSubmitting.value = false
     showModal.value = false
   }
+}
+
+function handleRestart() {
+  resetearFormulario()
+  window.location.reload()
 }
 </script>
 
@@ -143,6 +143,15 @@ async function handleConfirm() {
     <div class="success-icon">✓</div>
     <h2>¡Reporte Enviado!</h2>
     <p>El reporte ha ingresado a nuestra bandeja operativa y se ha notificado a los supervisores disponibles.</p>
+    
+    <div class="tracking-box">
+      <span class="tracking-label">Código de seguimiento</span>
+      <span class="tracking-code">{{ trackingCode }}</span>
+    </div>
+    
+    <button class="btn-submit" style="margin-top: 20px" @click="handleRestart">
+      Reportar otro problema
+    </button>
   </div>
 </template>
 
@@ -323,5 +332,32 @@ async function handleConfirm() {
   justify-content: center;
   font-size: 3rem;
   font-weight: bold;
+}
+
+.tracking-box {
+  background: var(--bg-subtle);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-md);
+  padding: 16px 32px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tracking-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.tracking-code {
+  font-family: monospace;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: 0.1em;
 }
 </style>
