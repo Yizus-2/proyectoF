@@ -49,8 +49,6 @@ const manageForm = ref({
 })
 const isUpdating = ref(false)
 
-const filterStatus = ref('ACTIVOS') // Deprecated in favor of kpiFilter, but we can keep it for the local tab navigation if needed
-
 const filteredReports = computed(() => {
   let baseList = reports.value
 
