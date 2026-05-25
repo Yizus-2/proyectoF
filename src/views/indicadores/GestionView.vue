@@ -222,8 +222,14 @@ function getPriorityColor(priority: string) {
     case 'CRITICA': return 'badge--critical'
     case 'ALTA': return 'badge--danger'
     case 'MEDIA': return 'badge--warning'
+    case 'BAJA': return 'badge--baja'
     default: return 'badge--neutral'
   }
+}
+
+function formatPriority(priority: string) {
+  if (priority === 'BAJA') return 'REGULAR'
+  return priority
 }
 
 function getSlaStatus(report: Report) {
@@ -325,7 +331,7 @@ function getSlaStatus(report: Report) {
             <div class="list-col col-status">
               <div class="badges">
                 <span class="badge" :class="getSlaStatus(report).class">{{ getSlaStatus(report).label }}</span>
-                <span class="badge" :class="getPriorityColor(report.priority)">{{ report.priority }}</span>
+                <span class="badge" :class="getPriorityColor(report.priority)">{{ formatPriority(report.priority) }}</span>
               </div>
               <div v-if="report.work_order" class="work-order-text">
                 <small>Asignado: <strong>{{ report.work_order }}</strong></small>
@@ -635,6 +641,37 @@ function getSlaStatus(report: Report) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.badge--critical { background: #991b1b; color: white; }
+.badge--danger { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.badge--warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.badge--baja { background: rgba(234, 179, 8, 0.15); color: #ca8a04; }
+.badge--neutral { background: var(--bg-subtle); color: var(--muted); }
+.badge--outline { background: transparent; border: 1px solid currentColor; color: var(--text-secondary); }
+
+/* SLA Badges */
+.sla--done { background: #10b981; color: white; }
+.sla--expired { background: #ef4444; color: white; animation: pulse 2s infinite; }
+.sla--warning { background: #f59e0b; color: white; }
+.sla--ok { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; }
+.sla--none { background: #64748b; color: white; }
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
 
 .meta-item {

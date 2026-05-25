@@ -53,8 +53,8 @@ const categories = [
 ]
 
 const urgencyLevels = [
-  { value: 'BAJA', label: 'Normal', color: '#10b981', desc: 'No es urgente' },
-  { value: 'ALTA', label: 'Urgente', color: '#f59e0b', desc: 'Requiere pronta atención' },
+  { value: 'BAJA', label: 'Regular', color: '#eab308', desc: 'Atención estándar' },
+  { value: 'ALTA', label: 'Urgente', color: '#f97316', desc: 'Requiere pronta atención' },
   { value: 'CRITICA', label: 'Crítico', color: '#ef4444', desc: 'Peligro inmediato' }
 ]
 
