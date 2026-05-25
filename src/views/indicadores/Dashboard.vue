@@ -234,14 +234,57 @@ const icons = {
         <!-- Escala Viva -->
         <RiskScaleLegend :contexto="indicadoresStore.contextoActual" />
 
-        <!-- Nueva Cuadrícula v2.1 -->
-        <section class="charts-grid-v2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 24px;">
-          <!-- KPIs Operativos que responden a preguntas -->
-          <ReportsByUrgencyChart />
-          <SlaComplianceChart />
-          <ZoneEfficiencyChart style="grid-column: span 2" />
-          <WeeklyTrendChart style="grid-column: span 2" />
-          <ChannelsChart style="grid-column: span 2" />
+        <!-- Resumen de Alto Nivel (KPIs) -->
+        <div class="kpi-banner">
+          <div class="kpi-card glass-card">
+            <div class="kpi-icon">📋</div>
+            <div class="kpi-data">
+              <h3>{{ kpis.total }}</h3>
+              <p>Total Reportes</p>
+            </div>
+          </div>
+          <div class="kpi-card glass-card warning">
+            <div class="kpi-icon">⏳</div>
+            <div class="kpi-data">
+              <h3>{{ kpis.pending }}</h3>
+              <p>Pendientes</p>
+            </div>
+          </div>
+          <div class="kpi-card glass-card success">
+            <div class="kpi-icon">✅</div>
+            <div class="kpi-data">
+              <h3>{{ kpis.resolved }}</h3>
+              <p>Resueltos</p>
+            </div>
+          </div>
+          <div class="kpi-card glass-card danger">
+            <div class="kpi-icon">🚨</div>
+            <div class="kpi-data">
+              <h3>{{ kpis.critical }}</h3>
+              <p>Críticos Activos</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nueva Cuadrícula v2.1 Mejorada -->
+        <section class="dashboard-grid">
+          <div class="chart-wrapper">
+            <ReportsByUrgencyChart />
+          </div>
+          <div class="chart-wrapper">
+            <SlaComplianceChart />
+          </div>
+          
+          <div class="chart-wrapper span-2">
+            <WeeklyTrendChart />
+          </div>
+
+          <div class="chart-wrapper">
+            <ZoneEfficiencyChart />
+          </div>
+          <div class="chart-wrapper">
+            <ChannelsChart />
+          </div>
         </section>
       </div>
     </div>
@@ -346,7 +389,92 @@ const icons = {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 24px;
 }
+.glass-card {
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.05);
+  backdrop-filter: blur(16px);
+}
 
+.kpi-banner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+
+.kpi-card {
+  display: flex;
+  align-items: center;
+  padding: 24px;
+  gap: 20px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.kpi-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+}
+
+.kpi-icon {
+  font-size: 2.5rem;
+  background: var(--bg-subtle);
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+}
+
+.kpi-data h3 {
+  font-size: 2rem;
+  font-weight: 900;
+  margin: 0;
+  color: var(--text);
+  line-height: 1;
+}
+
+.kpi-data p {
+  color: var(--muted);
+  margin: 4px 0 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.kpi-card.warning .kpi-icon { background: rgba(245, 158, 11, 0.15); }
+.kpi-card.warning h3 { color: #f59e0b; }
+
+.kpi-card.success .kpi-icon { background: rgba(16, 185, 129, 0.15); }
+.kpi-card.success h3 { color: #10b981; }
+
+.kpi-card.danger .kpi-icon { background: rgba(239, 68, 68, 0.15); }
+.kpi-card.danger h3 { color: #ef4444; }
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.chart-wrapper {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+  overflow: hidden;
+}
+
+@media (min-width: 1100px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .span-2 {
+    grid-column: span 2;
+  }
+}
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
