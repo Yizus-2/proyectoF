@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 const { state, paso2Valido, siguientePaso, pasoAnterior, obtenerUbicacionGPS, actualizarPinMapa } = useReporteForm()
 
 const isLoadingGPS = ref(false)
+const isLoadingSearch = ref(false)
 const gpsError = ref('')
 const zonasDb = ref<any[]>([])
 
@@ -62,6 +63,34 @@ async function handleGetLocation() {
   }
 }
 
+async function searchAddress() {
+  if (!state.value.paso2.direccion) return
+  
+  isLoadingSearch.value = true
+  gpsError.value = ''
+  
+  try {
+    // Agregamos Santa Marta, Colombia para acotar la búsqueda por defecto
+    const query = encodeURIComponent(`${state.value.paso2.direccion}, Santa Marta, Colombia`)
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`)
+    const data = await res.json()
+    
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat)
+      const lng = parseFloat(data[0].lon)
+      actualizarPinMapa(lat, lng)
+      await reverseGeocode(lat, lng) // Para auto-completar zona
+    } else {
+      gpsError.value = 'No se encontró la dirección en el mapa. Intenta mover el pin manualmente.'
+    }
+  } catch (error) {
+    console.error('Error buscando dirección:', error)
+    gpsError.value = 'Error al buscar la dirección.'
+  } finally {
+    isLoadingSearch.value = false
+  }
+}
+
 async function handleMapUpdate(lat: number, lng: number) {
   actualizarPinMapa(lat, lng)
   await reverseGeocode(lat, lng)
@@ -104,12 +133,24 @@ async function handleMapUpdate(lat: number, lng: number) {
       <!-- Dirección -->
       <div class="form-group flex-2">
         <label class="form-label">Dirección aproximada o Barrio <span class="required">*</span></label>
-        <input 
-          v-model="state.paso2.direccion"
-          type="text"
-          class="form-input"
-          placeholder="Ej: Calle 123 # 45-67, Barrio Centro"
-        />
+        <div class="search-input-wrapper">
+          <input 
+            v-model="state.paso2.direccion"
+            type="text"
+            class="form-input"
+            placeholder="Ej: Calle 123 # 45-67, Barrio Centro"
+            @keyup.enter="searchAddress"
+          />
+          <button 
+            class="btn-search-address" 
+            @click="searchAddress"
+            :disabled="isLoadingSearch || !state.value.paso2.direccion"
+            title="Buscar en el mapa"
+          >
+            <Loader2 v-if="isLoadingSearch" class="spin" size="18" />
+            <MapPin v-else size="18" />
+          </button>
+        </div>
       </div>
 
       <!-- Zona -->
@@ -317,6 +358,30 @@ async function handleMapUpdate(lat: number, lng: number) {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.search-input-wrapper {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-search-address {
+  background: var(--bg-subtle);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-md);
+  padding: 0 16px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-search-address:hover:not(:disabled) {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
 }
 
 .coords-manual {
