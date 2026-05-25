@@ -167,7 +167,7 @@ function updateLocation(lat: number, lng: number) {
 }
 
 const canProceedStep1 = computed(() => (locationObtained.value || form.value.address.length > 5) && !!form.value.zone_id)
-const canProceedStep2 = computed(() => !!form.value.category && form.value.description.length > 3)
+const canProceedStep2 = computed(() => !!form.value.category && form.value.description.length > 3 && !!form.value.photoFile)
 
 function nextStep() { if (step.value < totalSteps) step.value++ }
 function prevStep() { if (step.value > 1) step.value-- }
@@ -401,8 +401,8 @@ function resetForm() {
           <h2 class="step-title">¿Cómo te contactamos? <small>(opcional)</small></h2>
           <p class="step-desc">Si deseas recibir actualizaciones sobre tu reporte, déjanos tus datos.</p>
           <div class="fields-row">
-            <div class="field"><label for="name">Nombre</label><input id="name" v-model="form.reporter_name" placeholder="Tu nombre" /></div>
-            <div class="field"><label for="phone">Teléfono</label><input id="phone" v-model="form.reporter_phone" type="tel" placeholder="300 123 4567" /></div>
+            <div class="field"><label for="name">Nombre (Solo texto)</label><input id="name" v-model="form.reporter_name" type="text" pattern="[A-Za-zñÑáéíóúÁÉÍÓÚ ]+" title="Solo se permiten letras" placeholder="Tu nombre" /></div>
+            <div class="field"><label for="phone">Teléfono (Solo números)</label><input id="phone" v-model="form.reporter_phone" type="tel" pattern="[0-9]+" title="Solo se permiten números" placeholder="3001234567" /></div>
           </div>
           <div class="field" style="margin-top: 14px;">
             <label for="email">Correo electrónico</label>
@@ -451,7 +451,7 @@ function resetForm() {
 
 /* Categories */
 .cat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-.cat-card { display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 8px; border-radius:14px; border:2px solid var(--stroke); background:var(--bg-subtle); cursor:pointer; transition:all .2s; }
+.cat-card { display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px 8px; border-radius:14px; border:2px solid var(--stroke); background:var(--bg-subtle); cursor:pointer; transition:all .2s; color:var(--text); }
 .cat-card:hover { border-color:var(--primary); }
 .cat-card.selected { border-color:var(--primary); background:color-mix(in srgb,var(--primary) 8%,var(--card)); box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent); }
 .cat-icon { font-size:1.8rem; }
@@ -459,7 +459,7 @@ function resetForm() {
 
 /* Urgency */
 .urgency-row { display:flex; gap:10px; }
-.urgency-btn { flex:1; display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px; border:2px solid var(--stroke); background:var(--bg-subtle); cursor:pointer; text-align:left; transition:all .2s; }
+.urgency-btn { flex:1; display:flex; align-items:center; gap:10px; padding:12px; border-radius:12px; border:2px solid var(--stroke); background:var(--bg-subtle); cursor:pointer; text-align:left; transition:all .2s; color:var(--text); }
 .urgency-btn.selected { font-weight:700; }
 .urgency-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
 .urgency-btn strong { display:block; font-size:.85rem; }

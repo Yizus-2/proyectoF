@@ -5,10 +5,30 @@ import type { Report } from '@/types/report'
 
 export const useReportsStore = defineStore('reports', () => {
   const reports = ref<Report[]>([])
+  const filterDate = ref<'ALL' | 'TODAY' | 'WEEK' | 'MONTH'>('ALL')
   const zonesData = ref<any[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   let realtimeChannel: any = null
+
+  const filteredReports = computed(() => {
+    if (filterDate.value === 'ALL') return reports.value
+    
+    const now = new Date()
+    let startDate = new Date()
+    
+    if (filterDate.value === 'TODAY') {
+      startDate.setHours(0,0,0,0)
+    } else if (filterDate.value === 'WEEK') {
+      startDate.setDate(now.getDate() - now.getDay())
+      startDate.setHours(0,0,0,0)
+    } else if (filterDate.value === 'MONTH') {
+      startDate.setDate(1)
+      startDate.setHours(0,0,0,0)
+    }
+
+    return reports.value.filter(r => new Date(r.created_at) >= startDate)
+  })
 
   async function fetchReports() {
     loading.value = true
@@ -54,7 +74,7 @@ export const useReportsStore = defineStore('reports', () => {
 
   // KPIs computed
   const kpis = computed(() => {
-    const list = reports.value
+    const list = filteredReports.value
     const activos = list.filter(r => 
       ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO', 'EVIDENCIA_PENDIENTE', 'VERIFICACION_SUPERVISOR'].includes(r.status)
     ).length
@@ -91,7 +111,7 @@ export const useReportsStore = defineStore('reports', () => {
       return d.toISOString().split('T')[0]
     }).reverse()
     const tCounts = Object.fromEntries(last7Days.map(d => [d, 0]))
-    reports.value.forEach(r => {
+    filteredReports.value.forEach(r => {
       const date = r.created_at.split('T')[0]
       if (tCounts[date] !== undefined) tCounts[date]++
     })
@@ -104,7 +124,7 @@ export const useReportsStore = defineStore('reports', () => {
   // Priority Stats
   const priorityStats = computed(() => {
     const countsPriority: Record<string, number> = { 'CRITICA': 0, 'ALTA': 0, 'MEDIA': 0, 'BAJA': 0 }
-    reports.value.forEach(r => {
+    filteredReports.value.forEach(r => {
       if (countsPriority[r.priority] !== undefined) countsPriority[r.priority]++
     })
     return Object.entries(countsPriority).map(([label, value]) => ({ label, value }))
@@ -116,19 +136,19 @@ export const useReportsStore = defineStore('reports', () => {
       'APP_MOVIL': 0, 'WEB': 0, 'WHATSAPP': 0, 'TELEFONO': 0,
       'CORREO': 0, 'PRESENCIAL': 0, 'BOTON_EMERGENCIA': 0
     }
-    reports.value.forEach(r => {
+    filteredReports.value.forEach(r => {
       const src = r.source || 'WEB'
       if (countsChannels[src] !== undefined) countsChannels[src]++
     })
     
     const channelMapping: Record<string, string> = {
-      'APP_MOVIL': '📱 App Móvil',
-      'WEB': '💻 Portal Web',
-      'WHATSAPP': '💬 WhatsApp',
-      'TELEFONO': '📞 Línea Telefónica',
-      'CORREO': '📧 Correo Electrónico',
-      'PRESENCIAL': '🏢 Oficina Física',
-      'BOTON_EMERGENCIA': '🚨 Botón Emergencia'
+      'APP_MOVIL': 'App Móvil',
+      'WEB': 'Portal Web',
+      'WHATSAPP': 'WhatsApp',
+      'TELEFONO': 'Línea Telefónica',
+      'CORREO': 'Correo Electrónico',
+      'PRESENCIAL': 'Oficina Física',
+      'BOTON_EMERGENCIA': 'Botón Emergencia'
     }
 
     return Object.entries(countsChannels).map(([key, value]) => ({
@@ -140,15 +160,10 @@ export const useReportsStore = defineStore('reports', () => {
   // SLA Stats
   const slaStats = computed(() => {
     const countsSla: Record<string, number> = { 'A TIEMPO': 0, 'RIESGO': 0, 'VENCIDO': 0, 'FINALIZADO': 0 }
-    // As the view reports_sla_status might not be directly queryable or we want to keep it reactive and fast,
-    // we calculate SLA status in-memory for the current reports.
-    reports.value.forEach(r => {
+    filteredReports.value.forEach(r => {
       if (['CERRADO', 'EVALUADO', 'RESUELTO', 'RECHAZADO'].includes(r.status)) {
         countsSla['FINALIZADO']++
       } else {
-        // Simple client-side SLA estimation
-        // Default to A TIEMPO, but if there's zone info we could refine it.
-        // For simplicity:
         countsSla['A TIEMPO']++
       }
     })
@@ -157,13 +172,14 @@ export const useReportsStore = defineStore('reports', () => {
 
   // Recent events
   const recentEvents = computed(() => {
-    return [...reports.value]
+    return [...filteredReports.value]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5)
   })
 
   return {
     reports,
+    filteredReports,
     zonesData,
     loading,
     error,
@@ -175,6 +191,7 @@ export const useReportsStore = defineStore('reports', () => {
     priorityStats,
     channelStats,
     slaStats,
-    recentEvents
+    recentEvents,
+    filterDate
   }
 })

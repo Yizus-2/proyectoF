@@ -73,8 +73,8 @@ const channelsChartData = computed(() => {
     datasets: [{
       label: 'Reportes',
       backgroundColor: [
-        '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6',
-        '#ec4899', '#14b8a6', '#f43f5e', '#64748b'
+        '#0284c7', '#0ea5e9', '#38bdf8', '#7dd3fc',
+        '#bae6fd', '#0369a1', '#075985', '#0c4a6e'
       ],
       data: channelStats.value.map(c => c.value),
       borderWidth: 0,
@@ -89,8 +89,13 @@ const trendChartData = computed(() => {
     labels: trendStats.value.map(t => t.label),
     datasets: [{
       label: 'Reportes Diarios',
-      borderColor: '#3b82f6',
-      backgroundColor: '#3b82f6',
+      borderColor: '#8b5cf6',
+      backgroundColor: '#8b5cf6',
+      pointBackgroundColor: '#fff',
+      pointBorderColor: '#8b5cf6',
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      borderWidth: 3,
       data: trendStats.value.map(t => t.value),
       tension: 0.3
     }]
@@ -187,14 +192,14 @@ const icons = {
           :class="{ active: activeTab === 'analytics' }"
           @click="activeTab = 'analytics'"
         >
-          📊 Analíticas y KPIs
+          Analíticas y KPIs
         </button>
         <button
           class="tab-btn"
           :class="{ active: activeTab === 'operations' }"
           @click="activeTab = 'operations'"
         >
-          🔄 Gestión de Operaciones
+          Gestión de Operaciones
         </button>
         <button
           v-if="auth.isSupervisor || auth.isAdmin"
@@ -202,7 +207,7 @@ const icons = {
           :class="{ active: activeTab === 'verification' }"
           @click="activeTab = 'verification'"
         >
-          ✅ Verificación de Evidencias
+          Verificación de Evidencias
         </button>
       </div>
     </header>
@@ -219,6 +224,19 @@ const icons = {
       </div>
 
       <div v-else class="analytics-content-flow">
+        <!-- Filtros -->
+        <div class="filters-bar" style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+          <div class="filter-group">
+            <label for="time-filter" style="margin-right: 8px; font-weight: 600; font-size: 0.9rem;">Filtrar por tiempo:</label>
+            <select id="time-filter" v-model="reportsStore.filterDate" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--stroke); background: var(--card); color: var(--text); font-family: inherit;">
+              <option value="ALL">Todos los tiempos</option>
+              <option value="TODAY">Hoy</option>
+              <option value="WEEK">Esta semana</option>
+              <option value="MONTH">Este mes</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Fila de KPIs -->
         <section class="kpi-row">
           <KpiCard title="Reportes Activos" :value="kpis.activos" :icon="icons.active" trend="Total sin resolver" trendUp />
@@ -232,8 +250,8 @@ const icons = {
           <!-- Gráfico de Tendencia -->
           <div class="glass-card chart-container" style="grid-column: span 2;">
             <div class="card-header">
-              <h3>📈 Tendencia de Reportes (7 días)</h3>
-              <span class="info-tooltip" title="Volumen de incidentes reportados en la última semana.">ℹ️</span>
+              <h3>Tendencia de Reportes (7 días)</h3>
+              <span class="info-tooltip" title="Volumen de incidentes reportados en la última semana.">Info</span>
             </div>
             <div class="chart-box">
               <Line :data="trendChartData" :options="chartOptions" />
@@ -244,10 +262,10 @@ const icons = {
           <div class="glass-card chart-container">
             <div class="card-header">
               <div class="header-titles">
-                <h3>⏱️ Cumplimiento SLA de Atención</h3>
+                <h3>Cumplimiento SLA de Atención</h3>
                 <p class="chart-subtitle">Resueltos dentro del tiempo objetivo según riesgo</p>
               </div>
-              <span class="info-tooltip" title="SLA: Crítico <30min, Alto <2h, Medio <8h, Bajo <24h">ℹ️</span>
+              <span class="info-tooltip" title="SLA: Crítico <30min, Alto <2h, Medio <8h, Bajo <24h">Info</span>
             </div>
             <div class="chart-box">
               <Doughnut :data="complianceChartData" :options="doughnutOptions" />
@@ -258,10 +276,10 @@ const icons = {
           <div class="glass-card chart-container">
             <div class="card-header">
               <div class="header-titles">
-                <h3>⚠️ Reportes por Nivel de Riesgo</h3>
+                <h3>Reportes por Nivel de Riesgo</h3>
                 <p class="chart-subtitle">Reportes activos distribuidos por urgencia de atención</p>
               </div>
-              <span class="info-tooltip" title="Clasificación de incidentes según su nivel de riesgo y urgencia de atención.">ℹ️</span>
+              <span class="info-tooltip" title="Clasificación de incidentes según su nivel de riesgo y urgencia de atención.">Info</span>
             </div>
             <div class="chart-box" style="height: 220px;">
               <Bar :data="riskChartData" :options="chartOptions" />
@@ -277,8 +295,8 @@ const icons = {
           <!-- Gráfico 2: Canales de Reporte Completos -->
           <div class="glass-card chart-container" style="grid-column: span 2;">
             <div class="card-header">
-              <h3>📡 Canales de Reporte Utilizados</h3>
-              <span class="info-tooltip" title="Distribución de reportes recibidos según el canal ciudadano de entrada.">ℹ️</span>
+              <h3>Canales de Reporte Utilizados</h3>
+              <span class="info-tooltip" title="Distribución de reportes recibidos según el canal ciudadano de entrada.">Info</span>
             </div>
             <div class="chart-box">
               <Bar :data="channelsChartData" :options="horizontalBarOptions" />
