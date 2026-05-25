@@ -1,20 +1,18 @@
 -- 004_setup_10_operarios.sql
 -- Vincula perfiles de usuario (Operarios) con sus respectivas cuadrillas base.
+-- IMPORTANTE: Ejecutar DESPUÉS de 20260525100000_unify_crews.sql
 
--- 1. Añadir columna a profiles para asociarlos a una cuadrilla (Opcional, pero recomendado)
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cuadrilla_id uuid REFERENCES public.cuadrillas(id);
-
--- 2. Asegurarnos que pgcrypto está activo para generar contraseñas (solo para inserts directos en BD)
+-- 1. Asegurarnos que pgcrypto está activo
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 3. Crear 10 operarios vinculados 1 a 1 con las cuadrillas insertadas en el paso 002
+-- 2. Crear 10 operarios vinculados 1 a 1 con las cuadrillas en public.crews
 DO $$
 DECLARE
     c record;
     uid uuid;
     i integer := 1;
 BEGIN
-    FOR c IN SELECT id, nombre, zone_id FROM public.cuadrillas ORDER BY nombre LIMIT 10 LOOP
+    FOR c IN SELECT id, name, zone_id FROM public.crews ORDER BY name LIMIT 10 LOOP
         uid := gen_random_uuid();
         
         -- Insertar en auth.users (Supabase Auth Core)
@@ -28,11 +26,11 @@ BEGIN
             '{"provider":"email","providers":["email"]}', '{"role":"operator"}', now(), now()
         );
         
-        -- Insertar en public.profiles (O actualizar si existe un trigger)
-        INSERT INTO public.profiles (id, email, full_name, role, zone_id, cuadrilla_id)
-        VALUES (uid, 'operador' || i || '@essmar.co', 'Operario - ' || c.nombre, 'operator', c.zone_id, c.id)
+        -- Insertar en public.profiles con crew_id (tabla unificada)
+        INSERT INTO public.profiles (id, email, full_name, role, zone_id, crew_id)
+        VALUES (uid, 'operador' || i || '@essmar.co', 'Operario - ' || c.name, 'operator', c.zone_id, c.id)
         ON CONFLICT (id) DO UPDATE 
-        SET role = 'operator', cuadrilla_id = EXCLUDED.cuadrilla_id, zone_id = EXCLUDED.zone_id, full_name = EXCLUDED.full_name;
+        SET role = 'operator', crew_id = EXCLUDED.crew_id, zone_id = EXCLUDED.zone_id, full_name = EXCLUDED.full_name;
         
         i := i + 1;
     END LOOP;

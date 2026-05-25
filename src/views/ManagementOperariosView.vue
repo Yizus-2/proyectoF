@@ -10,14 +10,13 @@ interface Operario {
   full_name: string
   role: string
   zone_id: number | null
-  cuadrilla_id: string | null
+  crew_id: number | null
 }
 
 interface Cuadrilla {
-  id: string
-  nombre: string
-  casos_activos: number
-  casos_maximos: number
+  id: number
+  name: string
+  workload: number
   zone_id: number | null
 }
 
@@ -49,8 +48,11 @@ async function loadData() {
     if (oData) operarios.value = oData
 
     // 3. Cargar cuadrillas
-    const { data: cData } = await supabase.from('cuadrillas').select('*')
-    if (cData) cuadrillas.value = cData
+    async function loadCuadrillas() {
+      const { data } = await supabase.from('crews').select('id, name').order('name')
+      if (data) cuadrillas.value = data
+    }
+    await loadCuadrillas()
 
   } catch (err) {
     console.error("Error cargando operarios:", err)
@@ -74,9 +76,9 @@ function getZoneName(zoneId: number | null) {
   return zones.value.find(z => z.id === zoneId)?.name || 'Desconocida'
 }
 
-function getCuadrillaName(cuadrillaId: string | null) {
-  if (!cuadrillaId) return 'N/A'
-  return cuadrillas.value.find(c => c.id === cuadrillaId)?.nombre || 'Desconocida'
+function getCuadrillaName(crewId: number | null) {
+  if (!crewId) return 'N/A'
+  return cuadrillas.value.find(c => c.id === crewId)?.name || 'Desconocida'
 }
 
 function openEditModal(op: Operario) {
@@ -163,7 +165,7 @@ onMounted(() => {
                       <small class="text-muted">{{ op.email }}</small>
                     </td>
                     <td>
-                      <span v-if="op.cuadrilla_id" class="role-badge">{{ getCuadrillaName(op.cuadrilla_id) }}</span>
+                      <span v-if="op.crew_id" class="role-badge">{{ getCuadrillaName(op.crew_id) }}</span>
                       <span v-else class="text-muted">Sin Cuadrilla</span>
                     </td>
                     <td>
@@ -198,24 +200,24 @@ onMounted(() => {
                 v-for="c in cuadrillasWithZones" 
                 :key="c.id" 
                 class="cuadrilla-card"
-                :class="{ 'is-full': c.casos_activos >= c.casos_maximos }"
+                :class="{ 'is-full': c.workload >= 3 }"
               >
                 <div class="c-header">
-                  <h4>{{ c.nombre }}</h4>
+                  <h4>{{ c.name }}</h4>
                   <span class="c-zone">{{ c.zona_nombre }}</span>
                 </div>
                 <div class="c-load">
                   <div class="load-text">
-                    <span :class="c.casos_activos >= c.casos_maximos ? 'text-danger' : 'text-success'">
-                      {{ c.casos_activos }} / {{ c.casos_maximos }} Asignaciones
+                    <span :class="c.workload >= 3 ? 'text-danger' : 'text-success'">
+                      {{ c.workload }} / 3 Asignaciones
                     </span>
-                    <CheckBadgeIcon v-if="c.casos_activos < c.casos_maximos" class="w-5 h-5 text-success" />
+                    <CheckBadgeIcon v-if="c.workload < 3" class="w-5 h-5 text-success" />
                     <ExclamationTriangleIcon v-else class="w-5 h-5 text-danger" />
                   </div>
                   <div class="progress-bar">
                     <div class="progress-fill" 
-                         :class="c.casos_activos >= c.casos_maximos ? 'bg-danger' : 'bg-success'"
-                         :style="{ width: `${(c.casos_activos / c.casos_maximos) * 100}%` }">
+                         :class="c.workload >= 3 ? 'bg-danger' : 'bg-success'"
+                         :style="{ width: `${(c.workload / 3) * 100}%` }">
                     </div>
                   </div>
                 </div>

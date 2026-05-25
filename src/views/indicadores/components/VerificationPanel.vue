@@ -25,27 +25,27 @@ async function loadCases() {
 
     const reportIds = reports.map(r => r.id)
     
-    // 2. Cargar sus evidencias (la última asociada)
+    // 2. Cargar sus evidencias
     const { data: evidencias, error: evError } = await supabase
-      .from('evidencias')
-      .select('reporte_id, tipo, url_archivo, creado_en')
-      .in('reporte_id', reportIds)
-      .order('creado_en', { ascending: false })
+      .from('evidences')
+      .select('report_id, description, materials, evidence_url, created_at')
+      .in('report_id', reportIds)
+      .order('created_at', { ascending: true }) // Primera evidencia primero
 
     if (evError) throw evError
 
     // 3. Unir datos
     verificationCases.value = reports.map(r => {
-      const reportEvidencias = evidencias?.filter(e => e.reporte_id === r.id) || []
-      const ultimaEvidencia = reportEvidencias.length > 0 ? reportEvidencias[0] : null
+      const reportEvidencias = evidencias?.filter(e => e.report_id === r.id) || []
       
       return {
         ...r,
-        evidencia: ultimaEvidencia ? {
-          url: ultimaEvidencia.url_archivo ? supabase.storage.from('reports').getPublicUrl(ultimaEvidencia.url_archivo).data.publicUrl : null,
-          tipo: ultimaEvidencia.tipo,
-          fecha: ultimaEvidencia.creado_en
-        } : null
+        evidencias: reportEvidencias.map(e => ({
+          url: e.evidence_url ? e.evidence_url : null,
+          descripcion: e.description,
+          materiales: e.materials,
+          fecha: e.created_at
+        }))
       }
     })
   } catch (e) {
@@ -122,7 +122,15 @@ onUnmounted(() => {
         </div>
 
         <div class="evidence-box">
-          <img v-if="c.evidencia?.url" :src="c.evidencia.url" alt="Evidencia" class="evidence-img" />
+          <div v-if="c.evidencias && c.evidencias.length > 0" class="evidence-grid">
+            <div v-for="(ev, idx) in c.evidencias" :key="idx" class="evidence-item">
+              <span class="evidence-label">{{ idx === 0 ? '📍 Llegada' : '✅ Finalizado' }}</span>
+              <img v-if="ev.url" :src="ev.url" alt="Evidencia" class="evidence-img" />
+              <div class="evidence-desc">
+                <small>{{ ev.descripcion }}</small>
+              </div>
+            </div>
+          </div>
           <div v-else class="no-evidence">
             Sin evidencia fotográfica
           </div>
@@ -208,24 +216,55 @@ onUnmounted(() => {
 
 .evidence-box {
   width: 100%;
-  height: 200px;
+  background: var(--bg-body);
+  border-top: 1px solid var(--stroke);
+  border-bottom: 1px solid var(--stroke);
+}
+.evidence-grid {
+  display: flex;
+  overflow-x: auto;
+  gap: 2px;
+  background: var(--stroke);
+}
+.evidence-item {
+  flex: 1;
+  min-width: 140px;
+  position: relative;
   background: #000;
+  display: flex;
+  flex-direction: column;
+}
+.evidence-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 4px;
+  z-index: 10;
 }
 .evidence-img {
   width: 100%;
-  height: 100%;
+  height: 160px;
   object-fit: cover;
 }
+.evidence-desc {
+  background: var(--card);
+  padding: 8px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  flex-grow: 1;
+}
 .no-evidence {
-  height: 100%;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--muted);
   font-size: 0.85rem;
-  background: var(--card);
-  border-top: 1px solid var(--stroke);
-  border-bottom: 1px solid var(--stroke);
 }
 
 .actions {

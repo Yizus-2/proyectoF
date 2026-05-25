@@ -35,7 +35,7 @@ async function loadZones() {
 }
 
 async function loadCuadrillas() {
-  const { data } = await supabase.from('cuadrillas').select('*').order('nombre')
+  const { data } = await supabase.from('crews').select('*').order('name')
   if (data) cuadrillas.value = data
 }
 
@@ -211,15 +211,17 @@ async function saveManagement() {
 
     // Si es admin y está asignando
     if (auth.isAdmin && manageForm.value.status === 'ASIGNADO' && manageForm.value.cuadrilla_id) {
-      const { error: assignErr } = await supabase.from('asignaciones').insert({
-        reporte_id: selectedReport.value.id,
-        cuadrilla_id: manageForm.value.cuadrilla_id,
-        admin_id: (await supabase.auth.getUser()).data.user?.id
-      })
-      if (assignErr) throw assignErr
+      const crewName = cuadrillas.value.find(c => c.id === manageForm.value.cuadrilla_id)?.name || 'Cuadrilla'
+      await supabase.from('reports').update({ 
+        status: 'ASIGNADO', 
+        work_order: crewName,
+        assigned_at: new Date().toISOString()
+      }).eq('id', selectedReport.value.id)
       
-      const cuadrillaNombre = cuadrillas.value.find(c => c.id === manageForm.value.cuadrilla_id)?.nombre || 'Cuadrilla'
-      await supabase.from('reports').update({ status: 'ASIGNADO', work_order: cuadrillaNombre }).eq('id', selectedReport.value.id)
+      // Incrementar carga de la cuadrilla
+      await supabase.from('crews').update({
+        workload: (cuadrillas.value.find(c => c.id === manageForm.value.cuadrilla_id)?.workload || 0) + 1
+      }).eq('id', manageForm.value.cuadrilla_id)
     } 
     // Si es cuadrilla enviando evidencia
     else if (evidencePath) {
@@ -227,10 +229,13 @@ async function saveManagement() {
       if (manageForm.value.status === 'RESUELTO') tipoEvidencia = 'FINALIZADO'
       if (manageForm.value.isFalseAlarm) tipoEvidencia = 'FALSO_AVISO'
 
-      const { error: evErr } = await supabase.from('evidencias').insert({
-        reporte_id: selectedReport.value.id,
-        tipo: tipoEvidencia,
-        url_archivo: evidencePath
+      const { error: evErr } = await supabase.from('evidences').insert({
+        report_id: selectedReport.value.id,
+        evidence_url: supabase.storage.from('reports').getPublicUrl(evidencePath).data.publicUrl,
+        description: tipoEvidencia,
+        materials: '',
+        hours_spent: 0,
+        uploaded_by: (await supabase.auth.getUser()).data.user?.id
       })
       if (evErr) throw evErr
 
@@ -264,8 +269,8 @@ function setupRealtime() {
       loadReports() 
     }).subscribe()
 
-  realtimeCuadrillas = supabase.channel('public:cuadrillas')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'cuadrillas' }, () => {
+  realtimeCuadrillas = supabase.channel('public:crews')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'crews' }, () => {
       loadCuadrillas()
     }).subscribe()
 }
@@ -364,20 +369,20 @@ function getSlaStatus(report: Report) {
             v-for="c in cuadrillas" 
             :key="c.id" 
             class="crew-item"
-            :class="{ 'crew-full': c.casos_activos >= c.casos_maximos }"
+            :class="{ 'crew-full': c.workload >= 3 }"
           >
             <div class="crew-info">
-              <span class="crew-name">{{ c.nombre }}</span>
-              <span class="crew-status" :class="c.casos_activos >= c.casos_maximos ? 'text-danger' : (c.casos_activos > 0 ? 'text-warning' : 'text-success')">
-                {{ c.casos_activos >= c.casos_maximos ? 'Ocupada' : 'Disponible' }}
+              <span class="crew-name">{{ c.name }}</span>
+              <span class="crew-status" :class="c.workload >= 3 ? 'text-danger' : (c.workload > 0 ? 'text-warning' : 'text-success')">
+                {{ c.workload >= 3 ? 'Ocupada' : 'Disponible' }}
               </span>
             </div>
             <div class="crew-load">
-              <span class="load-text">{{ c.casos_activos }} / {{ c.casos_maximos }} Casos</span>
+              <span class="load-text">{{ c.workload }} / 3 Casos</span>
               <div class="load-bar-track">
                 <div class="load-bar-fill" 
-                     :class="c.casos_activos >= c.casos_maximos ? 'bg-danger' : 'bg-primary'"
-                     :style="{ width: `${(c.casos_activos / c.casos_maximos) * 100}%` }">
+                     :class="c.workload >= 3 ? 'bg-danger' : 'bg-primary'"
+                     :style="{ width: `${(c.workload / 3) * 100}%` }">
                 </div>
               </div>
             </div>
@@ -482,9 +487,9 @@ function getSlaStatus(report: Report) {
                 v-for="c in cuadrillas" 
                 :key="c.id" 
                 :value="c.id"
-                :disabled="c.casos_activos >= c.casos_maximos"
+                :disabled="c.workload >= 3"
               >
-                {{ c.nombre }} ({{ c.casos_activos }}/{{ c.casos_maximos }} Casos)
+                {{ c.name }} ({{ c.workload }}/3 Casos)
               </option>
             </select>
             <small>Las cuadrillas con 3/3 casos están ocupadas y deshabilitadas.</small>

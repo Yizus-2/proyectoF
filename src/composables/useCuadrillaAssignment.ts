@@ -20,7 +20,7 @@ export function useCuadrillaAssignment() {
       return data as number | null
     } catch (err: any) {
       console.error('Error assigning crew automatically:', err)
-      assignmentError.value = err.message || 'Error al asignar cuadrilla.'
+      assignmentError.value = err.message || 'Error al asignar cuadrilla automáticamente.'
       return null
     } finally {
       isAssigning.value = false

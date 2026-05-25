@@ -22,6 +22,7 @@ const filterStatus = ref('ACTIVOS')
 const mapInstance = ref<any>(null)
 const markerLayer = ref<any>(null)
 const zones = ref<any[]>([])
+const cuadrillas = ref<any[]>([])
 
 const { assignCrewAutomatically, isAssigning } = useCuadrillaAssignment()
 
@@ -31,6 +32,11 @@ const showEvidenceForm = ref(false)
 async function loadZones() {
   const { data } = await supabase.from('zones').select('*')
   if (data) zones.value = data
+}
+
+async function loadCuadrillas() {
+  const { data } = await supabase.from('crews').select('*')
+  if (data) cuadrillas.value = data
 }
 
 // Modal state
@@ -163,6 +169,7 @@ function onEvidenceSuccess() {
 
 onMounted(() => {
   loadZones()
+  loadCuadrillas()
   reportsStore.subscribeToReports()
 })
 
@@ -302,59 +309,69 @@ function getSlaStatus(report: Report) {
           <p class="modal-subtitle">{{ selectedReport?.tracking_code }} - {{ selectedReport?.address }}</p>
           
           <form @submit.prevent="saveManagement" class="modal-form">
-            <!-- Selección de Estado -->
-            <div class="field">
+            <!-- Selección de Estado (Solo Admin/Supervisor) -->
+            <div class="field" v-if="auth.isAdmin || auth.isSupervisor">
               <label>Estado actual</label>
               <select v-model="manageForm.status" required>
-                <!-- Operadores no pueden pasar directo a RESUELTO/CERRADO ni a ASIGNADO -->
                 <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
                 <option v-if="auth.isAdmin" value="CLASIFICADO">CLASIFICADO</option>
                 <option v-if="auth.isAdmin" value="ASIGNADO">ASIGNADO (Despachar cuadrilla)</option>
                 
-                <option v-if="!auth.isAdmin" value="EN_PROGRESO">EN PROGRESO (Trabajando en campo)</option>
+                <option value="EN_PROGRESO" disabled>EN PROGRESO (Requiere foto operario)</option>
                 <option value="EVIDENCIA_PENDIENTE" disabled>EVIDENCIA PENDIENTE</option>
                 <option value="VERIFICACION_SUPERVISOR" disabled>VERIFICACIÓN SUPERVISOR</option>
+                <option value="RESUELTO" disabled>RESUELTO (Requiere foto operario)</option>
                 
-                <option v-if="!auth.isAdmin" value="RESUELTO">RESUELTO (Por verificar)</option>
-                
-                <!-- Solo supervisores pueden cerrar -->
                 <option v-if="auth.isSupervisor" value="CERRADO">CERRADO (Archivado)</option>
                 <option v-if="auth.isAdmin" value="RECHAZADO">RECHAZADO (Inválido/Duplicado)</option>
-                <option value="CALIFICADO" disabled>CALIFICADO (Solo el ciudadano califica)</option>
+                <option value="CALIFICADO" disabled>CALIFICADO (Solo ciudadano)</option>
               </select>
             </div>
 
-            <!-- Asignación de Cuadrilla -->
-            <div class="field">
+            <!-- Asignación de Cuadrilla (Admin) -->
+            <div class="field" v-if="auth.isAdmin">
               <label>Cuadrilla Asignada</label>
               <div class="input-action-row">
-                <input 
-                  v-model="manageForm.work_order" 
-                  type="text" 
-                  placeholder="Ej: Cuadrilla Alfa - Fugas" 
-                />
+                <select v-model="manageForm.work_order">
+                  <option value="">— Auto-asignar según zona —</option>
+                  <option v-for="c in cuadrillas" :key="c.id" :value="c.name">
+                    {{ c.name }} (Carga: {{ c.workload }}/3)
+                  </option>
+                </select>
                 <button
                   type="button"
                   class="btn-auto-assign"
                   :disabled="isAssigning"
                   @click="triggerAutoAssignment"
-                  title="Asignar automáticamente la cuadrilla más óptima mediante geolocalización"
+                  title="Asignar automáticamente la cuadrilla más óptima"
                 >
-                  🤖 Asignación Auto.
+                  🤖 Auto
                 </button>
               </div>
-              <small>Esto busca la mejor cuadrilla disponible en el sector según carga de trabajo y distancia.</small>
+              <small>Puedes seleccionar manualmente o usar la asignación inteligente.</small>
+            </div>
+            
+            <!-- Vista de solo lectura para el operario -->
+            <div class="field" v-else-if="manageForm.work_order">
+              <label>Cuadrilla Asignada</label>
+              <input type="text" :value="manageForm.work_order" disabled style="background: var(--bg-body);" />
             </div>
 
             <!-- Subir Evidencia (SOLO Operario) -->
-            <div class="field-evidence-trigger" v-if="!auth.isAdmin && ['EN_PROGRESO', 'ASIGNADO', 'REPORTADO'].includes(selectedReport?.status || '')">
-              <p class="evidence-info-text">Si completaste las labores, registra la evidencia para pasar a verificación.</p>
+            <div class="field-evidence-trigger" v-if="!auth.isAdmin && ['ASIGNADO', 'EN_PROGRESO'].includes(selectedReport?.status || '')">
+              <p class="evidence-info-text" v-if="selectedReport?.status === 'ASIGNADO'">
+                Debes registrar tu llegada al sitio con una foto para pasar el estado a "En Progreso".
+              </p>
+              <p class="evidence-info-text" v-else>
+                Registra la evidencia final del trabajo completado para pasar a validación.
+              </p>
               <button type="button" class="btn-primary" @click="showEvidenceForm = true">
-                📷 Registrar Evidencias y Terminar Trabajo
+                <span v-if="selectedReport?.status === 'ASIGNADO'">📍 Registrar Llegada (Iniciar)</span>
+                <span v-else>📷 Registrar Evidencia Final</span>
               </button>
             </div>
 
-            <div class="modal-actions">
+            <div class="modal-actions" v-if="auth.isAdmin || auth.isSupervisor">
               <button type="button" class="btn-ghost" @click="closeModal" :disabled="isUpdating">Cancelar</button>
               <button type="submit" class="btn-primary" :disabled="isUpdating">
                 {{ isUpdating ? 'Guardando...' : 'Guardar Cambios' }}
@@ -368,6 +385,7 @@ function getSlaStatus(report: Report) {
           <EvidenciaForm
             v-if="selectedReport"
             :reportId="selectedReport.id"
+            :currentStatus="selectedReport.status"
             @success="onEvidenceSuccess"
             @cancel="showEvidenceForm = false"
           />

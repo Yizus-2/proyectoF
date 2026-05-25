@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   reportId: number
+  currentStatus: string
 }>()
 
 const emit = defineEmits<{
@@ -94,15 +95,15 @@ async function submitEvidence() {
       .from('reports')
       .getPublicUrl(storagePath)
 
-    // 3. Insert Evidence Record
+    // Insert Evidence Record
     const { error: dbError } = await supabase
       .from('evidences')
       .insert({
         report_id: props.reportId,
         evidence_url: publicUrl,
         description: description.value,
-        materials: materials.value,
-        hours_spent: hoursSpent.value,
+        materials: props.currentStatus === 'ASIGNADO' ? 'N/A (Llegada al sitio)' : materials.value,
+        hours_spent: props.currentStatus === 'ASIGNADO' ? 0 : hoursSpent.value,
         lat: lat.value || null,
         lng: lng.value || null,
         uploaded_by: auth.user?.id
@@ -110,13 +111,18 @@ async function submitEvidence() {
 
     if (dbError) throw dbError
 
-    // 4. Update Report Status to VERIFICACION_SUPERVISOR
+    // 4. Update Report Status based on current state
+    const nextStatus = props.currentStatus === 'ASIGNADO' ? 'EN_PROGRESO' : 'VERIFICACION_SUPERVISOR'
+    const updatePayload: any = { status: nextStatus }
+    
+    // Si es el final, guardamos el path, si es el inicio, lo guardamos en photo_path si no había.
+    if (nextStatus === 'VERIFICACION_SUPERVISOR') {
+      updatePayload.evidence_path = storagePath
+    }
+
     const { error: reportError } = await supabase
       .from('reports')
-      .update({
-        status: 'VERIFICACION_SUPERVISOR',
-        evidence_path: storagePath // Save storage path as well
-      })
+      .update(updatePayload)
       .eq('id', props.reportId)
 
     if (reportError) throw reportError
@@ -133,8 +139,11 @@ async function submitEvidence() {
 
 <template>
   <div class="evidence-form-card">
-    <h3 class="form-title">📸 Registrar Evidencia de Trabajo</h3>
-    <p class="form-subtitle">Sube el respaldo del trabajo completado para validación del supervisor.</p>
+    <h3 class="form-title" v-if="currentStatus === 'ASIGNADO'">📸 Registrar Llegada al Sitio (Inicio)</h3>
+    <h3 class="form-title" v-else>📸 Registrar Trabajo Finalizado</h3>
+    
+    <p class="form-subtitle" v-if="currentStatus === 'ASIGNADO'">Sube la evidencia inicial para cambiar el estado a "En Progreso".</p>
+    <p class="form-subtitle" v-else>Sube la evidencia final con detalle de materiales para validación del supervisor.</p>
 
     <div v-if="errorMessage" class="alert alert--danger">
       {{ errorMessage }}
@@ -176,8 +185,8 @@ async function submitEvidence() {
         ></textarea>
       </div>
 
-      <!-- Materiales -->
-      <div class="form-group">
+      <!-- Materiales (Solo al finalizar) -->
+      <div class="form-group" v-if="currentStatus !== 'ASIGNADO'">
         <label for="mats" class="form-label">Materiales e Insumos Utilizados</label>
         <input
           id="mats"
@@ -187,8 +196,8 @@ async function submitEvidence() {
         />
       </div>
 
-      <!-- Tiempo dedicado -->
-      <div class="form-group">
+      <!-- Tiempo dedicado (Solo al finalizar) -->
+      <div class="form-group" v-if="currentStatus !== 'ASIGNADO'">
         <label for="hours" class="form-label">Tiempo Dedicado (Horas)</label>
         <input
           id="hours"

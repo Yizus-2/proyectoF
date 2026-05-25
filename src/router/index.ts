@@ -28,6 +28,12 @@ const router = createRouter({
       path: '/indicadores', 
       name: 'dashboard', 
       component: () => import('@/views/indicadores/Dashboard.vue'),
+      meta: { requiresAuth: true, role: 'admin' }
+    },
+    { 
+      path: '/gestion', 
+      name: 'gestion', 
+      component: () => import('@/views/indicadores/GestionView.vue'),
       meta: { requiresAuth: true, role: 'operator' }
     },
     {
@@ -58,12 +64,19 @@ router.beforeEach(async (to, _from, next) => {
   if (requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (requiresAuth && requiredRole === 'admin' && !auth.isAdmin) {
-    next({ name: 'dashboard' })
-  } else if (requiresAuth && requiredRole === 'operator' && !auth.isOperator) {
+    // Si la ruta pide admin (ej. indicadores) pero es operator, mandarlo a gestion
+    if (auth.isOperator) next({ name: 'gestion' })
+    else next({ name: 'home' })
+  } else if (requiresAuth && requiredRole === 'operator' && !auth.isOperator && !auth.isAdmin) {
     next({ name: 'report' })
+  } else if (to.name === 'track' && auth.isAdmin) {
+    // Admin no debe consultar rastreo ciudadano
+    next({ name: 'dashboard' })
   } else if (isLoginPage && auth.isAuthenticated) {
-    if (auth.isOperator || auth.isAdmin) {
+    if (auth.isAdmin) {
       next({ name: 'dashboard' })
+    } else if (auth.isOperator) {
+      next({ name: 'gestion' })
     } else {
       next({ name: 'home' })
     }
