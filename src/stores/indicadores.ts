@@ -1,136 +1,149 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { useReportsStore } from './reports'
 import type { FiltrosDashboard, KpiConfig } from '@/types/indicadores'
 
 export const useIndicadoresStore = defineStore('indicadores', () => {
-  // Estado
+  const reportsStore = useReportsStore()
+
   const filtros = ref<FiltrosDashboard>({
     periodo: '7dias',
-    tipoReporte: 'todos',
+    categoria: 'todos',
     zona: 'todas',
     nivelRiesgo: 'todos'
   })
 
   const kpis = ref<KpiConfig[]>([
     {
+      id: 'activos',
+      pregunta: '¿Cuántos reportes tenemos activos?',
+      contexto: 'Reportes pendientes de resolución por las cuadrillas',
+      icono: 'Activity',
+      unidad: 'reportes',
+      color: 'blue',
+      componenteChart: 'Ninguno',
+      afectadoPorCategoria: true,
+      accionSugerida: {
+        bueno: 'Carga de trabajo bajo control',
+        malo: 'Asignar más cuadrillas o hacer horas extra'
+      }
+    },
+    {
       id: 'urgencia',
-      titulo: '¿Cuántos reportes hay por nivel de urgencia?',
-      subtitulo: 'Distribución actual de reportes según criticidad',
-      icono: 'ExclamationTriangleIcon',
+      pregunta: '¿Cuántos reportes urgentes tenemos activos?',
+      contexto: 'Reportes activos clasificados por nivel de criticidad',
+      icono: 'AlertTriangle',
       unidad: 'reportes',
       color: 'orange',
       componenteChart: 'ReportsByUrgencyChart',
-      requiereFiltroTipo: true
+      afectadoPorCategoria: true,
+      accionSugerida: {
+        bueno: 'Distribución equilibrada, sin cuellos de botella',
+        malo: 'Concentrar cuadrillas en reportes críticos y altos'
+      }
     },
     {
       id: 'sla',
-      titulo: '¿Se atendieron los reportes a tiempo?',
-      subtitulo: 'Porcentaje de reportes resueltos dentro del tiempo establecido',
-      icono: 'ClockIcon',
+      pregunta: '¿Se atendieron los reportes a tiempo?',
+      contexto: 'Porcentaje resuelto dentro del tiempo máximo según su riesgo',
+      icono: 'Clock',
       unidad: '%',
-      color: 'green',
+      color: 'emerald',
       componenteChart: 'SlaComplianceChart',
-      requiereFiltroTipo: true
+      afectadoPorCategoria: true,
+      accionSugerida: {
+        bueno: 'Cumplimiento óptimo, mantener ritmo',
+        malo: 'Revisar asignación de cuadrillas y tiempos de traslado'
+      }
     },
     {
-      id: 'tendencia',
-      titulo: '¿Cómo ha variado el volumen de reportes?',
-      subtitulo: 'Evolución diaria de reportes ingresados',
-      icono: 'ChartBarIcon',
+      id: 'trend',
+      pregunta: '¿Estamos recibiendo más o menos reportes?',
+      contexto: 'Volumen diario de nuevos incidentes',
+      icono: 'TrendingUp',
       unidad: 'reportes/día',
-      color: 'blue',
-      componenteChart: 'WeeklyTrendChart',
-      requiereFiltroTipo: true
-    },
-    {
-      id: 'canales',
-      titulo: '¿Por dónde nos están reportando?',
-      subtitulo: 'Distribución de reportes por canal de recepción',
-      icono: 'DevicePhoneMobileIcon',
-      unidad: 'reportes',
       color: 'purple',
-      componenteChart: 'ChannelsChart',
-      requiereFiltroTipo: false
+      componenteChart: 'WeeklyTrendChart',
+      afectadoPorCategoria: true,
+      accionSugerida: {
+        bueno: 'Estabilidad en la red, mantener rutina',
+        malo: 'Preparar cuadrillas de contingencia'
+      }
     },
     {
-      id: 'zonas',
-      titulo: '¿Qué zonas tienen más carga de trabajo?',
-      subtitulo: 'Distribución geográfica de reportes activos',
-      icono: 'MapPinIcon',
+      id: 'channels',
+      pregunta: '¿Por dónde nos están reportando?',
+      contexto: 'Distribución por canal de atención ciudadano',
+      icono: 'MessageSquare',
       unidad: 'reportes',
-      color: 'indigo',
-      componenteChart: 'ZoneEfficiencyChart',
-      requiereFiltroTipo: true
+      color: 'sky',
+      componenteChart: 'ChannelsChart',
+      afectadoPorCategoria: true,
+      accionSugerida: {
+        bueno: 'Uso correcto de canales oficiales',
+        malo: 'Mejorar adopción de la App Móvil o web'
+      }
     }
   ])
 
-  const cargando = ref(false)
-  const error = ref<string | null>(null)
-  
-  // Datos locales
-  const kpiData = ref<any>({})
-
-  // Getters
-  const kpisFiltrados = computed(() => {
-    return kpis.value.filter(kpi => {
-      if (!kpi.requiereFiltroTipo) return true
-      return true
-    })
+  const contextoActual = computed(() => {
+    const cat = filtros.value.categoria
+    return cat === 'todos' ? 'Todas las categorías' :
+           cat === 'fuga' ? 'Fugas de agua' :
+           cat === 'presion' ? 'Métricas de presión' :
+           cat === 'hidrante' ? 'Inventario de hidrantes' :
+           'Infraestructura general'
   })
 
-  const queryParams = computed(() => ({
-    periodo: filtros.value.periodo,
-    tipo: filtros.value.tipoReporte,
-    zona: filtros.value.zona,
-    riesgo: filtros.value.nivelRiesgo,
-    desde: filtros.value.fechaInicio,
-    hasta: filtros.value.fechaFin
-  }))
+  // Computamos los reportes filtrados base usando ambos stores
+  const reportesFiltrados = computed(() => {
+    let list = reportsStore.reports
 
-  // Acciones
-  function actualizarFiltros(nuevosFiltros: Partial<FiltrosDashboard>) {
-    filtros.value = { ...filtros.value, ...nuevosFiltros }
-  }
-
-  function resetearFiltros() {
-    filtros.value = {
-      periodo: '7dias',
-      tipoReporte: 'todos',
-      zona: 'todas',
-      nivelRiesgo: 'todos'
+    // Filtro Periodo
+    const now = new Date()
+    let startDate = new Date(0) // ALL
+    if (filtros.value.periodo === 'hoy') {
+      startDate = new Date()
+      startDate.setHours(0,0,0,0)
+    } else if (filtros.value.periodo === '7dias') {
+      startDate = new Date()
+      startDate.setDate(now.getDate() - 7)
+      startDate.setHours(0,0,0,0)
+    } else if (filtros.value.periodo === '30dias') {
+      startDate = new Date()
+      startDate.setDate(now.getDate() - 30)
+      startDate.setHours(0,0,0,0)
     }
-  }
+    
+    list = list.filter(r => new Date(r.created_at) >= startDate)
 
-  async function cargarDatosDashboard() {
-    cargando.value = true
-    error.value = null
-    try {
-      // Usaremos datos en memoria desde la tabla 'reports' si no hay RPC.
-      // Por compatibilidad temporal hacemos un fetch basico simulado.
-      const { data, error: supaError } = await supabase.from('reports').select('*')
-      if (supaError) throw supaError
-      
-      // Aquí se debería delegar a la RPC, pero mientras lo dejamos listo:
-      kpiData.value = data || []
-    } catch (e) {
-      console.error(e)
-      error.value = 'Error al cargar los indicadores. Intente nuevamente.'
-    } finally {
-      cargando.value = false
+    // Filtro Categoria
+    if (filtros.value.categoria !== 'todos') {
+      list = list.filter(r => r.category === filtros.value.categoria || r.tipo === filtros.value.categoria)
     }
+
+    // Filtro Zona
+    // Nota: r.zone_id es numérico, si zona es 'todas' pasa.
+    // Falta mapeo exacto de nombre a zone_id, lo omitiremos si 'todas'
+    // En el futuro: && r.zone_name.toLowerCase().includes(filtros.value.zona)
+
+    // Filtro Nivel Riesgo
+    if (filtros.value.nivelRiesgo !== 'todos') {
+      list = list.filter(r => r.priority?.toLowerCase() === filtros.value.nivelRiesgo)
+    }
+
+    return list
+  })
+
+  function actualizarFiltros(nuevos: Partial<FiltrosDashboard>) {
+    filtros.value = { ...filtros.value, ...nuevos }
   }
 
   return {
     filtros,
     kpis,
-    cargando,
-    error,
-    kpiData,
-    kpisFiltrados,
-    queryParams,
-    actualizarFiltros,
-    resetearFiltros,
-    cargarDatosDashboard
+    contextoActual,
+    reportesFiltrados,
+    actualizarFiltros
   }
 })

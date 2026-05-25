@@ -1,84 +1,140 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Bar } from 'vue-chartjs'
-import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
-import { storeToRefs } from 'pinia'
 import { useIndicadoresStore } from '@/stores/indicadores'
 import KpiCard from '../KpiCard.vue'
-import { MapPinIcon } from '@heroicons/vue/24/outline'
-
-ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
 
 const store = useIndicadoresStore()
-const { filtros } = storeToRefs(store)
 
-const getThemeColor = (variable: string) => {
-  if (typeof document === 'undefined') return '#ccc'
-  return getComputedStyle(document.documentElement).getPropertyValue(variable).trim() || '#ccc'
+const kpiConfig = {
+  pregunta: '¿Qué zonas tienen más carga?',
+  contexto: 'Reportes activos distribuidos por zona geográfica',
+  icono: 'MapPin',
+  unidad: 'reportes',
+  color: 'blue',
+  accionSugerida: { malo: 'Reasignar cuadrillas de zonas verdes a rojas' }
 }
 
-const chartData = computed(() => {
-  return {
-    labels: ['Zona Norte', 'Zona Sur', 'Zona Centro', 'Zona Oriente', 'Zona Occidente'],
-    datasets: [
-      { 
-        label: 'Total', 
-        backgroundColor: getThemeColor('--stroke') || '#334155', 
-        data: [45, 30, 20, 15, 10], 
-        borderRadius: 4 
-      },
-      { 
-        label: 'Activos', 
-        backgroundColor: getThemeColor('--primary') || '#3b82f6', 
-        data: [20, 15, 8, 5, 2], 
-        borderRadius: 4 
-      }
-    ]
-  }
-})
+const datos = computed(() => {
+  const reports = store.reportesFiltrados
+  const counts: Record<string, number> = {}
+  
+  reports.forEach(r => {
+    if (!['completado', 'rechazado', 'cerrado', 'resuelto'].includes(r.status.toLowerCase())) {
+      // Use zone as string, or zone_id if needed. Supabase stores zone name usually in 'zona' column
+      const zonaStr = r.zona || r.zone_id?.toString() || 'Sin Asignar'
+      if (!counts[zonaStr]) counts[zonaStr] = 0
+      counts[zonaStr]++
+    }
+  })
 
-const chartOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { 
-    legend: { 
-      position: 'bottom' as const, 
-      labels: { usePointStyle: true, padding: 20, color: getThemeColor('--text') || '#f8fafc' } 
-    } 
-  },
-  scales: { 
-    y: { grid: { display: false }, ticks: { color: getThemeColor('--muted') || '#94a3b8' } }, 
-    x: { grid: { display: false }, ticks: { color: getThemeColor('--muted') || '#94a3b8' } } 
-  }
-}))
+  const sorted = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(i => ({ zona: i[0], cantidad: i[1] }))
+
+  const max = sorted[0]?.cantidad || 1
+
+  return { sorted, max }
+})
 </script>
 
 <template>
   <KpiCard
-    titulo="¿Qué zonas tienen más carga de trabajo?"
-    subtitulo="Distribución geográfica de reportes activos"
-    tooltip="Muestra cuántos reportes totales y cuántos activos hay por cada zona operativa. Es clave para el balanceo de carga: si una zona tiene demasiados activos, el supervisor debe enviar cuadrillas de apoyo de otra zona."
-    unidad="reportes"
-    :periodo="filtros.periodo"
-    :filtroActivo="filtros.tipoReporte"
+    :pregunta="kpiConfig.pregunta"
+    :contexto="kpiConfig.contexto"
+    :icono="kpiConfig.icono"
+    :unidad="kpiConfig.unidad"
+    :color="kpiConfig.color"
+    :categoria-actual="store.contextoActual"
   >
-    <template #icon>
-      <MapPinIcon class="w-6 h-6 text-indigo-500" />
-    </template>
-    
-    <div class="chart-wrapper">
-      <Bar :data="chartData" :options="chartOptions" />
+    <div class="zones-container">
+      <div v-for="item in datos.sorted" :key="item.zona" class="zone-row">
+        <div class="zone-header">
+          <span class="zone-name">{{ item.zona.toUpperCase() }}</span>
+          <span class="zone-count">{{ item.cantidad }} activos</span>
+        </div>
+        <div class="progress-bg">
+          <div 
+            class="progress-fill"
+            :style="{ width: `${(item.cantidad / datos.max) * 100}%` }"
+          ></div>
+        </div>
+      </div>
+      <div v-if="datos.sorted.length === 0" class="empty-state">
+        No hay reportes activos en las zonas
+      </div>
     </div>
+
+    <template #tooltip>
+      <div class="tooltip-body">
+        <p><strong>Qué mide:</strong> Concentración de reportes sin resolver segmentado por la zona de operación.</p>
+        <p><strong>Decisión operativa:</strong> {{ kpiConfig.accionSugerida.malo }}</p>
+      </div>
+    </template>
   </KpiCard>
 </template>
 
 <style scoped>
-.w-6 { width: 1.5rem; }
-.h-6 { height: 1.5rem; }
-.text-indigo-500 { color: #6366f1; }
-.chart-wrapper {
-  position: relative;
-  height: 250px;
-  width: 100%;
+.zones-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 8px;
 }
+
+.zones-container::-webkit-scrollbar {
+  width: 4px;
+}
+.zones-container::-webkit-scrollbar-thumb {
+  background: var(--stroke);
+  border-radius: 4px;
+}
+
+.zone-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zone-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.zone-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.zone-count {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.progress-bg {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: var(--primary);
+  border-radius: 3px;
+  transition: width 0.8s ease;
+}
+
+.empty-state {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 16px 0;
+}
+.tooltip-body p { margin: 0; }
 </style>

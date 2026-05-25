@@ -1,120 +1,156 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { storeToRefs } from 'pinia'
 import { useIndicadoresStore } from '@/stores/indicadores'
 import KpiCard from '../KpiCard.vue'
-import { ExclamationTriangleIcon } from '@heroicons/vue/24/outline'
 
 const store = useIndicadoresStore()
-const { kpiData, filtros } = storeToRefs(store)
 
-const dataSummary = computed(() => {
+const kpiConfig = computed(() => store.kpis.find(k => k.id === 'urgencia'))
+
+const datos = computed(() => {
+  const reports = store.reportesFiltrados
   const counts = { critico: 0, alto: 0, medio: 0, bajo: 0 }
-  const datosFiltrados = kpiData.value || [] // Aquí asumiendo que kpiData es un array plano de mock
   
-  // Agrupación mock
-  counts.critico = datosFiltrados.filter((d: any) => d.priority === 'CRITICA').length || 12
-  counts.alto = datosFiltrados.filter((d: any) => d.priority === 'ALTA').length || 24
-  counts.medio = datosFiltrados.filter((d: any) => d.priority === 'MEDIA').length || 45
-  counts.bajo = datosFiltrados.filter((d: any) => d.priority === 'BAJA').length || 31
-  
-  return counts
+  reports.forEach(r => {
+    // Solo contar reportes activos
+    if (!['completado', 'rechazado', 'cerrado', 'resuelto'].includes(r.status.toLowerCase())) {
+      const p = r.priority?.toLowerCase() || 'medio'
+      if (counts[p] !== undefined) counts[p]++
+    }
+  })
+
+  return [
+    { nivel: 'Crítico', cantidad: counts.critico, color: '#dc2626', tiempoMaximo: '< 30 minutos', accionRequerida: 'Cuadrilla inmediata' },
+    { nivel: 'Alto', cantidad: counts.alto, color: '#ea580c', tiempoMaximo: '< 2 horas', accionRequerida: 'Priorizar recurso' },
+    { nivel: 'Medio', cantidad: counts.medio, color: '#d97706', tiempoMaximo: '< 8 horas', accionRequerida: 'Programar visita' },
+    { nivel: 'Bajo', cantidad: counts.bajo, color: '#059669', tiempoMaximo: '< 24 horas', accionRequerida: 'Mantenimiento planeado' }
+  ]
 })
+
+const totalActivos = computed(() => datos.value.reduce((sum, d) => sum + d.cantidad, 0))
 </script>
 
 <template>
   <KpiCard
-    titulo="¿Cuántos reportes hay por nivel de urgencia?"
-    subtitulo="Distribución actual de reportes según criticidad"
-    tooltip="Mide el volumen de reportes activos categorizados por prioridad. Permite al supervisor decidir dónde asignar las cuadrillas de emergencia."
-    unidad="reportes activos"
-    :periodo="filtros.periodo"
-    :filtroActivo="filtros.tipoReporte"
+    v-if="kpiConfig"
+    :pregunta="kpiConfig.pregunta"
+    :contexto="kpiConfig.contexto"
+    :icono="kpiConfig.icono"
+    :unidad="kpiConfig.unidad"
+    :color="kpiConfig.color"
+    :categoria-actual="store.contextoActual"
   >
-    <template #icon>
-      <ExclamationTriangleIcon class="w-6 h-6 text-orange-500" />
-    </template>
-    
-    <div class="urgency-bars">
-      <div class="bar-row">
-        <div class="bar-label">Crítico</div>
-        <div class="bar-track">
-          <div class="bar-fill bg-red-500" :style="{ width: `${(dataSummary.critico / 100) * 100}%` }"></div>
+    <div class="urgency-container">
+      <div v-for="item in datos" :key="item.nivel" class="urgency-row">
+        <div class="urgency-header">
+          <div class="urgency-label">
+            <span class="color-dot" :style="{ backgroundColor: item.color }"></span>
+            <span class="nivel-text">{{ item.nivel.toUpperCase() }}</span>
+          </div>
+          <span class="cantidad-text" :style="{ color: item.color }">{{ item.cantidad }}</span>
         </div>
-        <div class="bar-value">{{ dataSummary.critico }}</div>
-      </div>
-      
-      <div class="bar-row">
-        <div class="bar-label">Alto</div>
-        <div class="bar-track">
-          <div class="bar-fill bg-orange-500" :style="{ width: `${(dataSummary.alto / 100) * 100}%` }"></div>
+        
+        <div class="urgency-meta">
+          <span>Tiempo máximo: <strong>{{ item.tiempoMaximo }}</strong></span> • 
+          <span>Acción: <strong>{{ item.accionRequerida }}</strong></span>
         </div>
-        <div class="bar-value">{{ dataSummary.alto }}</div>
-      </div>
-      
-      <div class="bar-row">
-        <div class="bar-label">Medio</div>
-        <div class="bar-track">
-          <div class="bar-fill bg-yellow-500" :style="{ width: `${(dataSummary.medio / 100) * 100}%` }"></div>
+        
+        <div class="progress-bg">
+          <div 
+            class="progress-fill"
+            :style="{ 
+              width: totalActivos > 0 ? `${(item.cantidad / totalActivos) * 100}%` : '0%', 
+              backgroundColor: item.color 
+            }"
+          ></div>
         </div>
-        <div class="bar-value">{{ dataSummary.medio }}</div>
-      </div>
-      
-      <div class="bar-row">
-        <div class="bar-label">Bajo</div>
-        <div class="bar-track">
-          <div class="bar-fill bg-green-500" :style="{ width: `${(dataSummary.bajo / 100) * 100}%` }"></div>
-        </div>
-        <div class="bar-value">{{ dataSummary.bajo }}</div>
       </div>
     </div>
+
+    <!-- Tooltip -->
+    <template #tooltip>
+      <div class="tooltip-body">
+        <p><strong>Qué mide:</strong> Cantidad de reportes activos según su nivel de riesgo.</p>
+        <p><strong>Cómo se calcula:</strong> Suma de reportes con estado diferente a completado o cerrado.</p>
+        <p><strong>Decisión operativa:</strong> {{ kpiConfig.accionSugerida.malo }}</p>
+      </div>
+    </template>
   </KpiCard>
 </template>
 
 <style scoped>
-.w-6 { width: 1.5rem; }
-.h-6 { height: 1.5rem; }
-.text-orange-500 { color: #f97316; }
-
-.urgency-bars {
+.urgency-container {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 100%;
-}
-.bar-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.bar-label {
-  width: 60px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--muted, #94a3b8);
-}
-.bar-track {
-  flex-grow: 1;
-  height: 12px;
-  background-color: var(--bg-subtle, #0f172a);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.bar-fill {
-  height: 100%;
-  border-radius: 6px;
-  transition: width 0.5s ease;
-}
-.bar-value {
-  width: 30px;
-  text-align: right;
-  font-weight: 700;
-  font-size: 1rem;
-  color: var(--text, #f8fafc);
 }
 
-.bg-red-500 { background-color: #ef4444; }
-.bg-orange-500 { background-color: #f97316; }
-.bg-yellow-500 { background-color: #eab308; }
-.bg-green-500 { background-color: #22c55e; }
+.urgency-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.urgency-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.urgency-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nivel-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.cantidad-text {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.urgency-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.urgency-meta strong {
+  color: var(--text);
+}
+
+.progress-bg {
+  width: 100%;
+  height: 8px;
+  background-color: var(--bg-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tooltip-body p {
+  margin: 0;
+}
 </style>

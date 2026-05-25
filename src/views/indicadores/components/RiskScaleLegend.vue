@@ -1,68 +1,103 @@
 <script setup lang="ts">
-// Leyenda contextual de escalas de riesgo
+import { computed } from 'vue'
+
+const props = defineProps<{
+  contexto: string
+  mostrarSla?: boolean
+}>()
+
+const niveles = [
+  { nivel: 'Crítico', color: '#dc2626', maxTime: '< 30 minutos', accion: 'Cuadrilla inmediata' },
+  { nivel: 'Alto', color: '#ea580c', maxTime: '< 2 horas', accion: 'Priorizar recurso' },
+  { nivel: 'Medio', color: '#d97706', maxTime: '< 8 horas', accion: 'Programar visita' },
+  { nivel: 'Bajo', color: '#059669', maxTime: '< 24 horas', accion: 'Mantenimiento planeado' }
+]
 </script>
 
 <template>
-  <div class="risk-legend">
-    <div class="legend-title">Escalas de Riesgo (SLA):</div>
-    
-    <div class="legend-item">
-      <span class="dot critico"></span>
-      <span class="label">Crítico (< 30m)</span>
-    </div>
-    
-    <div class="legend-item">
-      <span class="dot alto"></span>
-      <span class="label">Alto (< 2h)</span>
-    </div>
-    
-    <div class="legend-item">
-      <span class="dot medio"></span>
-      <span class="label">Medio (< 8h)</span>
-    </div>
-    
-    <div class="legend-item">
-      <span class="dot bajo"></span>
-      <span class="label">Bajo (< 24h)</span>
+  <div class="risk-scale-legend">
+    <h4 class="legend-title">Escala de Urgencia ({{ contexto }})</h4>
+    <div class="legend-grid">
+      <div class="legend-header">Nivel</div>
+      <div class="legend-header">Tiempo Máximo</div>
+      <div class="legend-header">Acción Operativa</div>
+      
+      <template v-for="n in niveles" :key="n.nivel">
+        <div class="legend-cell flex-center gap-2">
+          <span class="color-dot" :style="{ backgroundColor: n.color }"></span>
+          <span class="font-bold">{{ n.nivel }}</span>
+        </div>
+        <div class="legend-cell text-muted">{{ n.maxTime }}</div>
+        <div class="legend-cell text-sm">{{ n.accion }}</div>
+      </template>
     </div>
   </div>
 </template>
 
 <style scoped>
-.risk-legend {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 12px 16px;
-  background: var(--card, #1e293b);
-  border: 1px solid var(--stroke, #334155);
-  border-radius: 8px;
+.risk-scale-legend {
+  background: var(--bg-subtle);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-md);
+  padding: 16px;
   font-size: 0.85rem;
 }
+
 .legend-title {
-  font-weight: 700;
-  color: var(--text, #f8fafc);
-  margin-right: 8px;
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
-.legend-item {
+
+.legend-grid {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) minmax(150px, 2fr);
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.legend-header {
+  font-weight: 700;
+  color: var(--muted);
+  border-bottom: 1px solid var(--stroke);
+  padding-bottom: 4px;
+}
+
+.legend-cell {
+  padding: 4px 0;
+  color: var(--text);
+}
+
+.flex-center {
   display: flex;
   align-items: center;
-  gap: 6px;
 }
-.dot {
-  width: 12px;
-  height: 12px;
+
+.gap-2 {
+  gap: 8px;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.text-muted {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.text-sm {
+  font-size: 0.8rem;
+}
+
+.color-dot {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   display: inline-block;
-}
-.dot.critico { background-color: #ef4444; }
-.dot.alto { background-color: #f97316; }
-.dot.medio { background-color: #eab308; }
-.dot.bajo { background-color: #22c55e; }
-
-.label {
-  color: var(--muted, #94a3b8);
-  font-weight: 500;
+  flex-shrink: 0;
 }
 </style>

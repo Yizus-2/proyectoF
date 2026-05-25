@@ -1,77 +1,121 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Doughnut } from 'vue-chartjs'
-import { Chart as ChartJS, Title, Tooltip, Legend, ArcElement } from 'chart.js'
-import { storeToRefs } from 'pinia'
+import { Bar } from 'vue-chartjs'
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip } from 'chart.js'
 import { useIndicadoresStore } from '@/stores/indicadores'
 import KpiCard from '../KpiCard.vue'
-import { DevicePhoneMobileIcon } from '@heroicons/vue/24/outline'
 
-ChartJS.register(Title, Tooltip, Legend, ArcElement)
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip)
 
 const store = useIndicadoresStore()
-const { filtros } = storeToRefs(store)
+const kpiConfig = computed(() => store.kpis.find(k => k.id === 'channels'))
 
-const getThemeColor = (variable: string) => {
-  if (typeof document === 'undefined') return '#ccc'
-  return getComputedStyle(document.documentElement).getPropertyValue(variable).trim() || '#ccc'
-}
+const datos = computed(() => {
+  const reports = store.reportesFiltrados
+  const countsChannels: Record<string, number> = {
+    'APP_MOVIL': 0, 'WEB': 0, 'WHATSAPP': 0, 'TELEFONO': 0,
+    'CORREO': 0, 'PRESENCIAL': 0, 'BOTON_EMERGENCIA': 0
+  }
+  
+  reports.forEach(r => {
+    const src = r.source || 'WEB'
+    if (countsChannels[src] !== undefined) countsChannels[src]++
+  })
 
-const chartData = computed(() => {
+  const channelMapping: Record<string, string> = {
+    'APP_MOVIL': 'App Móvil',
+    'WEB': 'Portal Web',
+    'WHATSAPP': 'WhatsApp',
+    'TELEFONO': 'Teléfono',
+    'CORREO': 'Correo',
+    'PRESENCIAL': 'Presencial',
+    'BOTON_EMERGENCIA': 'Botón S.O.S'
+  }
+
+  // Ordenar de mayor a menor
+  const sorted = Object.entries(countsChannels)
+    .sort((a, b) => b[1] - a[1])
+    .filter((_, i) => i < 5) // Mostrar Top 5 para legibilidad
+
   return {
-    labels: ['App Móvil', 'Web', 'WhatsApp', 'Teléfono'],
-    datasets: [{
-      backgroundColor: [
-        getThemeColor('--primary') || '#3b82f6', 
-        getThemeColor('--accent') || '#8b5cf6',
-        '#22c55e', // Verde whatsapp
-        getThemeColor('--stroke') || '#334155'
-      ],
-      data: [45, 25, 20, 10], // Mock values
-      borderWidth: 0,
-      hoverOffset: 15
-    }]
+    labels: sorted.map(i => channelMapping[i[0]] || i[0]),
+    data: sorted.map(i => i[1])
   }
 })
 
-const chartOptions = computed(() => ({
+const chartData = computed(() => ({
+  labels: datos.value.labels,
+  datasets: [{
+    label: 'Reportes',
+    data: datos.value.data,
+    backgroundColor: ['#0284c7', '#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd'],
+    borderRadius: 4,
+    barPercentage: 0.7
+  }]
+}))
+
+const chartOptions = {
+  indexAxis: 'y' as const,
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { 
-    legend: { 
-      position: 'right' as const, 
-      labels: { usePointStyle: true, padding: 15, color: getThemeColor('--text') || '#f8fafc' } 
-    } 
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: 'rgba(0,0,0,0.8)',
+      padding: 10
+    }
+  },
+  scales: {
+    x: {
+      beginAtZero: true,
+      grid: {
+        color: 'rgba(160, 160, 160, 0.1)',
+        drawBorder: false,
+      },
+      ticks: { precision: 0, color: '#8a82a0' }
+    },
+    y: {
+      grid: { display: false },
+      ticks: { color: '#8a82a0', font: { weight: 'bold' } }
+    }
   }
-}))
+}
 </script>
 
 <template>
   <KpiCard
-    titulo="¿Por dónde nos están reportando?"
-    subtitulo="Distribución de reportes por canal de recepción"
-    tooltip="Identifica las vías más utilizadas por los ciudadanos o personal para ingresar reportes. Ayuda a focalizar campañas de adopción digital (ej. promover la App Móvil sobre la línea telefónica)."
-    unidad="reportes"
-    :periodo="filtros.periodo"
-    filtroActivo="Todos"
+    v-if="kpiConfig"
+    :pregunta="kpiConfig.pregunta"
+    :contexto="kpiConfig.contexto"
+    :icono="kpiConfig.icono"
+    :unidad="kpiConfig.unidad"
+    :color="kpiConfig.color"
+    :categoria-actual="store.contextoActual"
   >
-    <template #icon>
-      <DevicePhoneMobileIcon class="w-6 h-6 text-purple-500" />
-    </template>
-    
-    <div class="chart-wrapper">
-      <Doughnut :data="chartData" :options="chartOptions" />
+    <div class="chart-container">
+      <Bar :data="chartData" :options="chartOptions" />
     </div>
+
+    <template #tooltip>
+      <div class="tooltip-body">
+        <p><strong>Qué mide:</strong> Volumen de reportes agrupados por el canal de recepción original (Top 5).</p>
+        <p><strong>Cómo se calcula:</strong> Suma absoluta por el campo "origen" del reporte ciudadano.</p>
+        <p><strong>Decisión operativa:</strong> {{ kpiConfig.accionSugerida.malo }}</p>
+      </div>
+    </template>
   </KpiCard>
 </template>
 
 <style scoped>
-.w-6 { width: 1.5rem; }
-.h-6 { height: 1.5rem; }
-.text-purple-500 { color: #a855f7; }
-.chart-wrapper {
+.chart-container {
   position: relative;
-  height: 250px;
+  height: 180px;
   width: 100%;
 }
+.tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tooltip-body p { margin: 0; }
 </style>

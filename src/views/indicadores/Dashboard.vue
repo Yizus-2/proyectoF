@@ -3,18 +3,22 @@ import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue
 import { useTheme } from '@/composables/useTheme'
 import { useAuthStore } from '@/stores/auth'
 import { useReportsStore } from '@/stores/reports'
-import KpiCard from '@/components/common/KpiCard.vue'
-import { Bar, Doughnut, Line } from 'vue-chartjs'
-
-const GestionView = defineAsyncComponent(() => import('./GestionView.vue'))
-const VerificacionPanel = defineAsyncComponent(() => import('../supervisor/VerificacionPanel.vue'))
-import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement } from 'chart.js'
-
-ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement, LineElement, PointElement)
+import DashboardFilters from './components/DashboardFilters.vue'
+import ReportsByUrgencyChart from './components/charts/ReportsByUrgencyChart.vue'
+import SlaComplianceChart from './components/charts/SlaComplianceChart.vue'
+import WeeklyTrendChart from './components/charts/WeeklyTrendChart.vue'
+import ChannelsChart from './components/charts/ChannelsChart.vue'
+import ZoneEfficiencyChart from './components/charts/ZoneEfficiencyChart.vue'
+import RiskScaleLegend from './components/RiskScaleLegend.vue'
+import { useIndicadoresStore } from '@/stores/indicadores'
 
 const activeTab = ref<'analytics' | 'operations' | 'verification'>('analytics')
 const auth = useAuthStore()
 const reportsStore = useReportsStore()
+const indicadoresStore = useIndicadoresStore()
+
+const GestionView = defineAsyncComponent(() => import('./GestionView.vue'))
+const VerificacionPanel = defineAsyncComponent(() => import('../supervisor/VerificacionPanel.vue'))
 
 // Bindings to the centralized store
 const loading = computed(() => reportsStore.loading)
@@ -224,169 +228,22 @@ const icons = {
       </div>
 
       <div v-else class="analytics-content-flow">
-        <!-- Filtros -->
-        <div class="filters-bar" style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
-          <div class="filter-group">
-            <label for="time-filter" style="margin-right: 8px; font-weight: 600; font-size: 0.9rem;">Filtrar por tiempo:</label>
-            <select id="time-filter" v-model="reportsStore.filterDate" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--stroke); background: var(--card); color: var(--text); font-family: inherit;">
-              <option value="ALL">Todos los tiempos</option>
-              <option value="TODAY">Hoy</option>
-              <option value="WEEK">Esta semana</option>
-              <option value="MONTH">Este mes</option>
-            </select>
-          </div>
-        </div>
+        <!-- Barra Global de Filtros (Contexto Visible) -->
+        <DashboardFilters />
 
-        <!-- Fila de KPIs -->
-        <section class="kpi-row">
-          <KpiCard title="Reportes Activos" :value="kpis.activos" :icon="icons.active" trend="Total sin resolver" trendUp />
-          <KpiCard title="En Progreso" :value="kpis.enProgreso" :icon="icons.progress" trend="Cuadrillas activas" trendUp />
-          <KpiCard title="Resueltos (Mes)" :value="kpis.resueltos" :icon="icons.done" trend="Resoluciones del mes" trendUp />
-          <KpiCard title="T. Promedio de Respuesta" :value="kpis.tiempoPromedio + 'h'" :icon="icons.time" trend="Desde asignación" trendUp />
-        </section>
+        <!-- Escala Viva -->
+        <RiskScaleLegend :contexto="indicadoresStore.contextoActual" />
 
-        <!-- Fila de Gráficos -->
-        <section class="charts-grid">
-          <!-- Gráfico de Tendencia -->
-          <div class="glass-card chart-container" style="grid-column: span 2;">
-            <div class="card-header">
-              <h3>Tendencia de Reportes (7 días)</h3>
-              <span class="info-tooltip" title="Volumen de incidentes reportados en la última semana.">Info</span>
-            </div>
-            <div class="chart-box">
-              <Line :data="trendChartData" :options="chartOptions" />
-            </div>
-          </div>
-
-          <!-- Gráfico 1: Cumplimiento de Tiempos de Respuesta -->
-          <div class="glass-card chart-container">
-            <div class="card-header">
-              <div class="header-titles">
-                <h3>Cumplimiento SLA de Atención</h3>
-                <p class="chart-subtitle">Resueltos dentro del tiempo objetivo según riesgo</p>
-              </div>
-              <span class="info-tooltip" title="SLA: Crítico <30min, Alto <2h, Medio <8h, Bajo <24h">Info</span>
-            </div>
-            <div class="chart-box">
-              <Doughnut :data="complianceChartData" :options="doughnutOptions" />
-            </div>
-          </div>
-
-          <!-- Gráfico 3: Escalas de Riesgo -->
-          <div class="glass-card chart-container">
-            <div class="card-header">
-              <div class="header-titles">
-                <h3>Reportes por Nivel de Riesgo</h3>
-                <p class="chart-subtitle">Reportes activos distribuidos por urgencia de atención</p>
-              </div>
-              <span class="info-tooltip" title="Clasificación de incidentes según su nivel de riesgo y urgencia de atención.">Info</span>
-            </div>
-            <div class="chart-box" style="height: 220px;">
-              <Bar :data="riskChartData" :options="chartOptions" />
-            </div>
-            <div class="mini-legend">
-              <span class="legend-item"><span class="dot red"></span> Crítico (<30m)</span>
-              <span class="legend-item"><span class="dot orange"></span> Alto (<2h)</span>
-              <span class="legend-item"><span class="dot yellow"></span> Medio (<8h)</span>
-              <span class="legend-item"><span class="dot green"></span> Bajo (<24h)</span>
-            </div>
-          </div>
-          
-          <!-- Gráfico 2: Canales de Reporte Completos -->
-          <div class="glass-card chart-container" style="grid-column: span 2;">
-            <div class="card-header">
-              <h3>Canales de Reporte Utilizados</h3>
-              <span class="info-tooltip" title="Distribución de reportes recibidos según el canal ciudadano de entrada.">Info</span>
-            </div>
-            <div class="chart-box">
-              <Bar :data="channelsChartData" :options="horizontalBarOptions" />
-            </div>
-          </div>
-        </section>
-
-        <!-- Leyendas y Umbrales de Riesgo -->
-        <section class="glass-card risk-scale-card">
-          <h3>Escalas y Umbrales de Prioridad de Atención</h3>
-          <div class="risk-grid">
-            <div class="risk-item critica">
-              <span class="dot-indicator red"></span>
-              <div class="risk-info">
-                <strong>Riesgo Crítico:</strong> Tiempos de respuesta menores a <strong>30 minutos</strong>. Fugas masivas, roturas de tuberías matrices, incidentes con peligro físico inmediato.
-              </div>
-            </div>
-            <div class="risk-item alta">
-              <span class="dot-indicator orange"></span>
-              <div class="risk-info">
-                <strong>Riesgo Alto:</strong> Tiempos de respuesta menores a <strong>2 horas</strong>. Fugas de agua en calzadas principales, daños severos a hidrantes públicos.
-              </div>
-            </div>
-            <div class="risk-item media">
-              <span class="dot-indicator yellow"></span>
-              <div class="risk-info">
-                <strong>Riesgo Medio:</strong> Tiempos de respuesta menores a <strong>8 horas</strong>. Presión de red disminuida, goteos constantes en redes de distribución secundaria.
-              </div>
-            </div>
-            <div class="risk-item baja">
-              <span class="dot-indicator green"></span>
-              <div class="risk-info">
-                <strong>Riesgo Bajo:</strong> Tiempos de respuesta menores a <strong>24 horas</strong>. Daños menores de infraestructura, lecturas de presión estándar o reportes preventivos.
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Eficiencia por Zonas & Feed de Eventos -->
-        <section class="footer-grid">
-          <div class="glass-card table-section">
-            <div class="card-header">
-              <h3>Eficiencia y Carga de Trabajo por Zonas</h3>
-            </div>
-            <div class="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Zona</th>
-                    <th>Total Reportes</th>
-                    <th>Activos</th>
-                    <th>Tiempo Prom.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="z in zonesData" :key="z.zone_id">
-                    <td class="td-primary">{{ z.zone_name }}</td>
-                    <td>{{ z.total_reports }}</td>
-                    <td>
-                      <span class="badge-pill" :class="z.active_reports > 0 ? 'bg-warn' : 'bg-success'">
-                        {{ z.active_reports }} activos
-                      </span>
-                    </td>
-                    <td>{{ z.avg_hours ? z.avg_hours + 'h' : '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="glass-card activity-section">
-            <div class="card-header">
-              <h3>Historial Reciente de Incidencias</h3>
-            </div>
-            <div class="feed-list">
-              <div v-for="item in recentEvents" :key="item.id" class="feed-item">
-                <div class="status-dot" :class="item.status.toLowerCase()"></div>
-                <div class="feed-body">
-                  <div class="feed-top">
-                    <span class="feed-code">{{ item.tracking_code || `#${item.id}` }}</span>
-                    <span class="feed-time">{{ new Date(item.created_at).toLocaleDateString() }}</span>
-                  </div>
-                  <p class="feed-address">{{ item.address }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- Nueva Cuadrícula v2.1 -->
+        <section class="charts-grid-v2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 24px;">
+          <!-- KPIs Operativos que responden a preguntas -->
+          <ReportsByUrgencyChart />
+          <SlaComplianceChart />
+          <ZoneEfficiencyChart style="grid-column: span 2" />
+          <WeeklyTrendChart style="grid-column: span 2" />
+          <ChannelsChart style="grid-column: span 2" />
         </section>
       </div>
-    </div>
 
     <!-- PESTAÑA 2: GESTIÓN DE OPERACIONES -->
     <div v-else-if="activeTab === 'operations'" class="tab-pane">

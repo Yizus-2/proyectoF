@@ -1,99 +1,142 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
 import { useIndicadoresStore } from '@/stores/indicadores'
-import type { PeriodoFiltro, TipoReporte, ZonaFiltro, NivelRiesgo } from '@/types/indicadores'
 
 const store = useIndicadoresStore()
-const { filtros } = storeToRefs(store)
 
-const setFiltro = (key: keyof typeof filtros.value, val: string) => {
-  store.actualizarFiltros({ [key]: val })
-}
+const periodos = [
+  { label: 'Hoy', value: 'hoy' },
+  { label: 'Últimos 7 Días', value: '7dias' },
+  { label: 'Últimos 30 Días', value: '30dias' },
+  { label: 'Histórico', value: 'todos' }
+]
+
+const categorias = [
+  { label: '🌊 Todas las Categorías', value: 'todos' },
+  { label: '💧 Fugas de Agua', value: 'fuga' },
+  { label: '🚰 Medición de Presión', value: 'presion' },
+  { label: '🧯 Inventario de Hidrantes', value: 'hidrante' },
+  { label: '🏗️ Infraestructura', value: 'infraestructura' }
+]
+
+const zonas = [
+  { label: '🌍 Todas las Zonas', value: 'todas' },
+  { label: 'Norte', value: 'norte' },
+  { label: 'Centro', value: 'centro' },
+  { label: 'Sur', value: 'sur' },
+  { label: 'Oriente', value: 'oriente' },
+  { label: 'Occidente', value: 'occidente' }
+]
+
+const riesgos = [
+  { label: 'Todos los niveles', value: 'todos' },
+  { label: '🔴 Crítico (< 30 min)', value: 'critico' },
+  { label: '🟠 Alto (< 2h)', value: 'alto' },
+  { label: '🟡 Medio (< 8h)', value: 'medio' },
+  { label: '🟢 Bajo (< 24h)', value: 'bajo' }
+]
 </script>
 
 <template>
-  <div class="dashboard-filters glass-card">
-    <div class="filter-item">
-      <label>📅 Período:</label>
-      <select :value="filtros.periodo" @change="e => setFiltro('periodo', (e.target as HTMLSelectElement).value as PeriodoFiltro)">
-        <option value="hoy">Hoy</option>
-        <option value="7dias">Últimos 7 días</option>
-        <option value="30dias">Este mes</option>
-        <option value="personalizado">Personalizado</option>
+  <div class="filters-glass-bar">
+    <div class="filter-group focus-highlight">
+      <label for="categoria">Categoría de Análisis:</label>
+      <select id="categoria" v-model="store.filtros.categoria" class="primary-select">
+        <option v-for="c in categorias" :key="c.value" :value="c.value">{{ c.label }}</option>
+      </select>
+    </div>
+    
+    <div class="filter-group">
+      <label for="periodo">Período:</label>
+      <select id="periodo" v-model="store.filtros.periodo">
+        <option v-for="p in periodos" :key="p.value" :value="p.value">{{ p.label }}</option>
       </select>
     </div>
 
-    <div class="filter-item">
-      <label>📂 Tipo de reporte:</label>
-      <select :value="filtros.tipoReporte" @change="e => setFiltro('tipoReporte', (e.target as HTMLSelectElement).value as TipoReporte)">
-        <option value="todos">Todos</option>
-        <option value="fuga">Fugas</option>
-        <option value="presion">Presión</option>
-        <option value="hidrante">Hidrantes</option>
-        <option value="infraestructura">Infraestructura</option>
+    <div class="filter-group">
+      <label for="zona">Sector/Zona:</label>
+      <select id="zona" v-model="store.filtros.zona">
+        <option v-for="z in zonas" :key="z.value" :value="z.value">{{ z.label }}</option>
       </select>
     </div>
 
-    <div class="filter-item">
-      <label>🌍 Zona:</label>
-      <select :value="filtros.zona" @change="e => setFiltro('zona', (e.target as HTMLSelectElement).value as ZonaFiltro)">
-        <option value="todas">Todas</option>
-        <option value="norte">Zona Norte</option>
-        <option value="centro">Zona Centro</option>
-        <option value="sur">Zona Sur</option>
-        <option value="oriente">Zona Oriente</option>
-        <option value="occidente">Zona Occidente</option>
-      </select>
-    </div>
-
-    <div class="filter-item">
-      <label>⚡ Nivel de riesgo:</label>
-      <select :value="filtros.nivelRiesgo" @change="e => setFiltro('nivelRiesgo', (e.target as HTMLSelectElement).value as NivelRiesgo)">
-        <option value="todos">Todos</option>
-        <option value="critico">Crítico</option>
-        <option value="alto">Alto</option>
-        <option value="medio">Medio</option>
-        <option value="bajo">Bajo</option>
+    <div class="filter-group">
+      <label for="riesgo">Urgencia:</label>
+      <select id="riesgo" v-model="store.filtros.nivelRiesgo">
+        <option v-for="r in riesgos" :key="r.value" :value="r.value">{{ r.label }}</option>
       </select>
     </div>
   </div>
 </template>
 
 <style scoped>
-.dashboard-filters {
+.filters-glass-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 16px;
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding: 16px 24px;
-  align-items: center;
-  background: var(--card, #1e293b);
-  border: 1px solid var(--stroke, #334155);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--stroke);
   box-shadow: var(--shadow-sm);
   margin-bottom: 24px;
+  position: sticky;
+  top: 16px;
+  z-index: 50;
 }
-.filter-item {
+
+.filter-group {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
 }
-.filter-item label {
-  font-size: 0.9rem;
+
+.filter-group label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.filter-group select {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stroke);
+  background: var(--bg-subtle);
+  color: var(--text);
   font-weight: 600;
-  color: var(--text, #f8fafc);
-  white-space: nowrap;
-}
-.filter-item select {
-  background: var(--bg-subtle, #0f172a);
-  border: 1px solid var(--stroke, #334155);
-  color: var(--text, #f8fafc);
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  outline: none;
+  font-size: 0.95rem;
   cursor: pointer;
+  transition: all var(--transition);
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%238a82a0%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 40px;
 }
-.filter-item select:focus {
-  border-color: var(--primary, #3b82f6);
+
+.filter-group select:hover {
+  border-color: var(--primary);
+}
+
+.filter-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.focus-highlight select.primary-select {
+  background-color: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.dark .focus-highlight select.primary-select {
+  background-color: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary-light);
 }
 </style>
