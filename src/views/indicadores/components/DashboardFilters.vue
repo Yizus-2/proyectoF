@@ -29,10 +29,10 @@ const zonas = [
 
 const riesgos = [
   { label: 'Todos los niveles', value: 'todos' },
-  { label: '🔴 Crítico (< 30 min)', value: 'critico' },
-  { label: '🟠 Alto (< 2h)', value: 'alto' },
-  { label: '🟡 Medio (< 8h)', value: 'medio' },
-  { label: '🟢 Bajo (< 24h)', value: 'bajo' }
+  { label: '🔴 Crítico (< 30 min)', value: 'critica' },
+  { label: '🟠 Alto (< 2h)', value: 'alta' },
+  { label: '🟡 Medio (< 8h)', value: 'media' },
+  { label: '🟢 Bajo (< 24h)', value: 'baja' }
 ]
 </script>
 

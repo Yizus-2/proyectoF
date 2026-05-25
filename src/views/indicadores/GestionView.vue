@@ -103,6 +103,10 @@ async function loadReports() {
 }
 
 function openManageModal(report: Report) {
+  if (['CERRADO', 'RECHAZADO', 'EVALUADO'].includes(report.status)) {
+    alert('Este reporte ya ha sido finalizado y no puede ser modificado ni reasignado.')
+    return
+  }
   selectedReport.value = report
   manageForm.value.status = report.status
   manageForm.value.work_order = report.work_order || ''
@@ -283,7 +287,7 @@ function getSlaStatus(report: Report) {
             
             <div class="card-footer">
               <button 
-                v-if="auth.isAdmin || auth.isSupervisor || !['RESUELTO', 'CERRADO', 'RECHAZADO', 'EVALUADO'].includes(report.status)"
+                v-if="!['CERRADO', 'RECHAZADO', 'EVALUADO'].includes(report.status)"
                 class="btn-manage" 
                 @click="openManageModal(report)"
               >
