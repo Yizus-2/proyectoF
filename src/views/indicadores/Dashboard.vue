@@ -244,6 +244,7 @@ const icons = {
           <ChannelsChart style="grid-column: span 2" />
         </section>
       </div>
+    </div>
 
     <!-- PESTAÑA 2: GESTIÓN DE OPERACIONES -->
     <div v-else-if="activeTab === 'operations'" class="tab-pane">
