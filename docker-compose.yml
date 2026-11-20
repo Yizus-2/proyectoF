@@ -38,8 +38,69 @@ services:
     container_name: essmar-sigvi-mailpit
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_PORT:-1025}:1025"
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
+  # ─── Perfil "full": despliegue 100% en contenedores (sin Node en el host) ───
+  api:
+    profiles: ["full"]
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: essmar-sigvi-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    environment:
+      API_PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-essmar_app}:${POSTGRES_PASSWORD:-essmar_local_dev_2026}@postgres:5432/${POSTGRES_DB:-essmar_sigvi}
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-essmar-sigvi}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-essmar_minio_admin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-EssmarMinio2026!}
+      S3_FORCE_PATH_STYLE: "true"
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-mailpit}
+      MAILPIT_HOST: mailpit
+      MAILPIT_PORT: 1025
+      GMAIL_USER: ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID:-}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET:-}
+      GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN:-}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-ESSMAR SIGVI <notificaciones@essmar.local>}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://127.0.0.1:8080}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:8080,http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:-essmar_change_jwt_secret_in_production}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@essmar.gov.co}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-AdminEssmar2026!}
+      SEED_SUPERVISOR_EMAIL: ${SEED_SUPERVISOR_EMAIL:-supervisor@essmar.gov.co}
+      SEED_SUPERVISOR_PASSWORD: ${SEED_SUPERVISOR_PASSWORD:-SupervisorEssmar2026!}
+      SEED_OPERATOR_PASSWORD: ${SEED_OPERATOR_PASSWORD:-OperarioEssmar2026!}
+    ports:
+      - "127.0.0.1:3001:3001"
+
+  web:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: essmar-sigvi-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
 
 volumes:
   essmar_pgdata:

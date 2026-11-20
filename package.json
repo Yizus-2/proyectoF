@@ -4,6 +4,12 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
+    "setup": "node scripts/cli.mjs setup",
+    "up": "node scripts/cli.mjs up",
+    "infra:up": "node scripts/cli.mjs infra:up",
+    "infra:down": "node scripts/cli.mjs infra:down",
+    "infra:reset": "node scripts/cli.mjs infra:reset",
+    "doctor": "node scripts/cli.mjs doctor",
     "dev": "vite",
     "dev:server": "npm --prefix server run dev",
     "server": "npm --prefix server start",
