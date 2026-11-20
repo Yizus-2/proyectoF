@@ -1,25 +1,81 @@
 import nodemailer from 'nodemailer'
 import { pool } from './db.js'
 
-const SMTP_HOST = process.env.SMTP_HOST || '127.0.0.1'
-const SMTP_PORT = Number(process.env.SMTP_PORT || 1025)
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true'
-const SMTP_USER = process.env.SMTP_USER || ''
-const SMTP_PASS = process.env.SMTP_PASS || ''
-const SMTP_FROM = process.env.SMTP_FROM || 'ESSMAR SIGVI <notificaciones@essmar.local>'
+const MAIL_PROVIDER = (process.env.MAIL_PROVIDER || 'mailpit').toLowerCase()
 const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || 'http://127.0.0.1:5173').replace(/\/$/, '')
 
-const transportConfig = {
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_SECURE
+function resolveMailConfig() {
+  if (MAIL_PROVIDER === 'gmail') {
+    const user = process.env.GMAIL_USER || process.env.SMTP_USER || ''
+    const pass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '').replace(/\s+/g, '')
+    return {
+      provider: 'gmail',
+      label: `gmail (${user || 'sin-usuario'})`,
+      from: process.env.SMTP_FROM || (user ? `ESSMAR SIGVI <${user}>` : 'ESSMAR SIGVI <notificaciones@essmar.local>'),
+      transport: {
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: user && pass ? { user, pass } : undefined
+      }
+    }
+  }
+
+  if (MAIL_PROVIDER === 'gmail_oauth2') {
+    const user = process.env.GMAIL_USER || ''
+    return {
+      provider: 'gmail_oauth2',
+      label: `gmail_oauth2 (${user || 'sin-usuario'})`,
+      from: process.env.SMTP_FROM || (user ? `ESSMAR SIGVI <${user}>` : 'ESSMAR SIGVI <notificaciones@essmar.local>'),
+      transport: {
+        service: 'gmail',
+        auth: {
+          type: 'OAuth2',
+          user,
+          clientId: process.env.GMAIL_CLIENT_ID || '',
+          clientSecret: process.env.GMAIL_CLIENT_SECRET || '',
+          refreshToken: process.env.GMAIL_REFRESH_TOKEN || ''
+        }
+      }
+    }
+  }
+
+  if (MAIL_PROVIDER === 'smtp') {
+    const host = process.env.SMTP_HOST || '127.0.0.1'
+    const port = Number(process.env.SMTP_PORT || 587)
+    const secure = process.env.SMTP_SECURE === 'true'
+    const user = process.env.SMTP_USER || ''
+    const pass = process.env.SMTP_PASS || ''
+    return {
+      provider: 'smtp',
+      label: `smtp (${host}:${port})`,
+      from: process.env.SMTP_FROM || 'ESSMAR SIGVI <notificaciones@essmar.local>',
+      transport: {
+        host,
+        port,
+        secure,
+        auth: user && pass ? { user, pass } : undefined
+      }
+    }
+  }
+
+  // Por defecto: Mailpit local
+  const host = process.env.MAILPIT_HOST || process.env.SMTP_HOST || '127.0.0.1'
+  const port = Number(process.env.MAILPIT_PORT || process.env.SMTP_PORT || 1025)
+  return {
+    provider: 'mailpit',
+    label: `mailpit (${host}:${port})`,
+    from: process.env.SMTP_FROM || 'ESSMAR SIGVI <notificaciones@essmar.local>',
+    transport: {
+      host,
+      port,
+      secure: false
+    }
+  }
 }
 
-if (SMTP_USER && SMTP_PASS) {
-  transportConfig.auth = { user: SMTP_USER, pass: SMTP_PASS }
-}
-
-const transporter = nodemailer.createTransport(transportConfig)
+const mailConfig = resolveMailConfig()
+const transporter = nodemailer.createTransport(mailConfig.transport)
 
 const CATEGORY_LABELS = {
   fuga_agua: 'Fuga de agua',
@@ -49,9 +105,17 @@ function escapeHtml(val) {
     .replace(/'/g, '&#039;')
 }
 
+export function getMailProviderInfo() {
+  return {
+    provider: mailConfig.provider,
+    label: mailConfig.label,
+    from: mailConfig.from
+  }
+}
+
 export async function checkSmtpHealth() {
   await transporter.verify()
-  return { host: SMTP_HOST, port: SMTP_PORT }
+  return { provider: mailConfig.provider, label: mailConfig.label }
 }
 
 function buildEmailHtml({ report, title, statusLabel, message, notes, sha256, includeSurvey }) {
@@ -128,6 +192,53 @@ async function logNotification({ reportId, eventType, recipient, subject, status
   }
 }
 
+export async function sendTestEmail(to, requestedBy) {
+  const subject = `Correo de prueba — ESSMAR SIGVI (${mailConfig.provider})`
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+      <div style="background: #1a1040; padding: 16px 22px; border-bottom: 4px solid #06b6a0;">
+        <h2 style="margin: 0; color: #ffffff; font-size: 17px;">ESSMAR SIGVI</h2>
+      </div>
+      <div style="padding: 20px 22px; color: #1f2937;">
+        <p style="margin: 0 0 10px; font-size: 14.5px;">La configuración de correo funciona correctamente.</p>
+        <p style="margin: 0; font-size: 13px; color: #4b5563;">
+          <strong>Proveedor activo:</strong> ${escapeHtml(mailConfig.label)}<br/>
+          <strong>Solicitado por:</strong> ${escapeHtml(requestedBy)}<br/>
+          <strong>Fecha:</strong> ${escapeHtml(new Date().toISOString())}
+        </p>
+      </div>
+    </div>
+  `
+
+  try {
+    const info = await transporter.sendMail({
+      from: mailConfig.from,
+      to,
+      subject,
+      html
+    })
+    await logNotification({
+      reportId: null,
+      eventType: 'TEST_EMAIL',
+      recipient: to,
+      subject,
+      status: 'ENVIADO',
+      providerId: info.messageId || null
+    })
+    return { sent: true, provider: mailConfig.provider, label: mailConfig.label, messageId: info.messageId }
+  } catch (err) {
+    await logNotification({
+      reportId: null,
+      eventType: 'TEST_EMAIL',
+      recipient: to,
+      subject,
+      status: 'ERROR',
+      errorMessage: err.message
+    })
+    throw err
+  }
+}
+
 export async function sendReportNotification({
   report,
   eventType,
@@ -161,7 +272,7 @@ export async function sendReportNotification({
   })
 
   const mailOptions = {
-    from: SMTP_FROM,
+    from: mailConfig.from,
     to: recipient,
     subject,
     html

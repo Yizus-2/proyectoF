@@ -22,7 +22,7 @@ import {
   uploadBufferToS3
 } from './storage.js'
 import { generateExecutiveReportPdf, generatePqrReceiptPdf } from './pdf.js'
-import { checkSmtpHealth, sendReportNotification } from './mailer.js'
+import { checkSmtpHealth, getMailProviderInfo, sendReportNotification, sendTestEmail } from './mailer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
@@ -335,7 +335,7 @@ app.get('/api/health', async (_req, res) => {
       database: 'postgresql',
       storage: 's3-minio',
       bucket: S3_BUCKET,
-      mail: smtp ? `smtp (${smtp.host}:${smtp.port})` : 'unavailable',
+      mail: smtp ? smtp.label : `unavailable (${getMailProviderInfo().provider})`,
       timestamp: new Date().toISOString()
     })
   } catch (err) {
@@ -1266,6 +1266,20 @@ app.get('/api/notifications', requireAuth, requireRoles('admin', 'supervisor'), 
   } catch (err) {
     console.error('GET /api/notifications error:', err)
     res.status(500).json({ error: 'Error al consultar bitácora de correos.' })
+  }
+})
+
+app.post('/api/notifications/test', requireAuth, requireRoles('admin'), async (req, res) => {
+  try {
+    const to = String(req.body?.to || req.user.email || '').trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      return res.status(400).json({ error: 'Correo de destino inválido.' })
+    }
+    const result = await sendTestEmail(to, req.user.email)
+    res.json(result)
+  } catch (err) {
+    console.error('POST /api/notifications/test error:', err)
+    res.status(502).json({ error: `Fallo enviando correo de prueba: ${err.message}` })
   }
 })
 
