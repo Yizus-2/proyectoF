@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
-const { Pool } = pg
+const { Pool, types } = pg
+
+// Parsear BIGINT (OID 20) y NUMERIC (OID 1700) como números JS para consistencia estricta con TypeScript
+types.setTypeParser(20, (val) => (val === null ? null : Number(val)))
+types.setTypeParser(1700, (val) => (val === null ? null : Number(val)))
 
 export const pool = new Pool({
   connectionString:
