@@ -58,7 +58,7 @@ const datos = computed(() => {
       <div v-for="item in datos.sorted" :key="item.zona" class="zone-row">
         <div class="zone-header">
           <span class="zone-name">{{ item.zona.toUpperCase() }}</span>
-          <span class="zone-count">{{ item.cantidad }} activos</span>
+          <span class="zone-count">{{ item.cantidad }} {{ item.cantidad === 1 ? 'activo' : 'activos' }}</span>
         </div>
         <div class="progress-bg">
           <div 

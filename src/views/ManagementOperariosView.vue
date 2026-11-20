@@ -222,8 +222,8 @@ onMounted(() => {
         
         <form @submit.prevent="saveOperario" class="modal-form">
           <div class="field">
-            <label>Zona de Operación</label>
-            <select v-model="editForm.zone_id">
+            <label for="operario-zone-select">Zona de Operación</label>
+            <select id="operario-zone-select" name="zone_id" v-model="editForm.zone_id">
               <option :value="null">Sin Zona (No recibirá asignaciones auto)</option>
               <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.name }}</option>
             </select>

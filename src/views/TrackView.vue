@@ -127,6 +127,19 @@ function formatDate(dateStr: string) {
   }).format(new Date(dateStr))
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  fuga_agua: 'Fuga de Agua',
+  fuga_alcantarillado: 'Alcantarillado',
+  tuberia_rota: 'Tubería Rota',
+  dano_pavimento: 'Daño Vial',
+  dano_infraestructura: 'Infraestructura',
+  otro: 'Otro'
+}
+
+function formatCategory(cat: string) {
+  return CATEGORY_LABELS[cat] || cat.replace(/_/g, ' ')
+}
+
 function getStatusColor(status: string) {
   if (['CERRADO', 'EVALUADO', 'RESUELTO'].includes(status)) return 'var(--success)'
   if (['RECHAZADO'].includes(status)) return 'var(--danger)'
@@ -148,9 +161,13 @@ function printLegalDocument() {
       </header>
 
       <form @submit.prevent="searchReport" class="search-box no-print">
+        <label for="track-code-input" class="sr-only">Código de seguimiento PQR</label>
         <input 
+          id="track-code-input"
+          name="trackingCode"
           v-model="trackingCode" 
           type="text" 
+          autocomplete="off"
           placeholder="Ej: REP-20260510-0002" 
           required 
           class="search-input"
@@ -168,7 +185,7 @@ function printLegalDocument() {
       <div v-if="reportData && !loading" class="result-card">
         <div class="result-header">
           <div class="result-title">
-            <span class="category-badge">{{ reportData.category.replace('_', ' ') }}</span>
+            <span class="category-badge">{{ formatCategory(reportData.category) }}</span>
             <h2>{{ reportData.tracking_code }}</h2>
           </div>
           <div class="status-badge" :style="{ backgroundColor: getStatusColor(reportData.status) + '15', color: getStatusColor(reportData.status), borderColor: getStatusColor(reportData.status) }">
@@ -193,7 +210,7 @@ function printLegalDocument() {
           <!-- Notificación Legal -->
           <div v-if="resolvedDate" class="legal-resolution-box">
             <h4>⚖️ Notificación de Resolución</h4>
-            <p>De acuerdo con el marco legal vigente, este reporte se certifica como <strong>RESUELTO</strong> con fecha exacta: <strong>{{ formatDate(resolvedDate) }}</strong>.</p>
+            <p>De acuerdo con el marco legal vigente, este reporte se certifica como <strong>RESUELTO</strong> con fecha exacta: <strong>{{ formatDate(resolvedDate).replace(/\.$/, '') }}</strong>.</p>
           </div>
           
           <div v-if="photoUrl" class="photo-container">
@@ -206,7 +223,7 @@ function printLegalDocument() {
             <img :src="evidenceUrl" alt="Evidencia del operador" class="report-photo evidence-photo" />
           </div>
 
-          <div class="actions" v-if="['CERRADO', 'EVALUADO'].includes(reportData.status)">
+          <div class="actions" v-if="reportData.status === 'CERRADO'">
             <RouterLink :to="`/encuesta/${reportData.tracking_code}`" class="btn-ghost no-print">
               ⭐ Evaluar servicio
             </RouterLink>
@@ -223,8 +240,8 @@ function printLegalDocument() {
             <h3>🛠️ Gestión Rápida (Operador)</h3>
             <form @submit.prevent="saveManagement" class="manage-form">
               <div class="field">
-                <label>Cambiar Estado</label>
-                <select v-model="manageForm.status" required>
+                <label for="track-manage-status">Cambiar Estado</label>
+                <select id="track-manage-status" name="status" v-model="manageForm.status" required>
                   <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
                   <option value="ASIGNADO">ASIGNADO (Enviado a cuadrilla)</option>
                   <option value="EN_PROGRESO">EN PROGRESO (Trabajando)</option>

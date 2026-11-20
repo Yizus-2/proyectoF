@@ -381,8 +381,8 @@ function resetForm() {
             <input id="sector" v-model="form.sector" type="text" placeholder="Ej: Pescaito, El Rodadero, etc." />
           </div>
           <div class="field" v-if="form.lat && form.lng">
-            <label>Coordenadas GPS (Alta Precisión)</label>
-            <input type="text" :value="`${form.lat.toFixed(6)}, ${form.lng.toFixed(6)}`" readonly class="readonly-input" />
+            <label for="gps-coords">Coordenadas GPS (Alta Precisión)</label>
+            <input id="gps-coords" name="gpsCoords" type="text" :value="`${form.lat.toFixed(6)}, ${form.lng.toFixed(6)}`" readonly class="readonly-input" />
           </div>
           <div class="field">
             <label for="zone">Zona / Sector</label>
@@ -422,18 +422,22 @@ function resetForm() {
           </div>
 
           <div class="field">
-            <label>Foto de evidencia</label>
+            <label for="photo">Foto de evidencia <span style="color: var(--danger);">*</span> <small style="font-weight: 500; color: var(--muted);">(obligatoria)</small></label>
             <label for="photo" class="upload-area">
-              <span v-if="!photoPreviewUrl">📷 Tomar o elegir foto</span>
+              <span v-if="!photoPreviewUrl">📷 Tomar o elegir foto (obligatorio para continuar)</span>
               <img v-else :src="photoPreviewUrl" alt="preview" class="preview-img" />
             </label>
-            <input id="photo" type="file" accept="image/*" capture="environment" class="sr-only" @change="onPhotoSelected" />
+            <input id="photo" name="photo" type="file" accept="image/*" capture="environment" class="sr-only" @change="onPhotoSelected" />
           </div>
 
           <div class="field">
-            <label for="desc">Descripción adicional</label>
-            <textarea id="desc" v-model="form.description" placeholder="Detalles que ayuden al técnico..." rows="3"></textarea>
+            <label for="desc">Descripción adicional <span style="color: var(--danger);">*</span></label>
+            <textarea id="desc" name="description" v-model="form.description" placeholder="Detalles que ayuden al técnico (mínimo 4 caracteres)..." rows="3"></textarea>
           </div>
+
+          <small v-if="!canProceedStep2" class="hint" style="color: var(--warning); font-weight: 600;">
+            Para continuar debes adjuntar una foto de evidencia y escribir una breve descripción.
+          </small>
 
           <div class="step-nav">
             <button type="button" class="btn-ghost" @click="prevStep">← Atrás</button>
@@ -446,12 +450,12 @@ function resetForm() {
           <h2 class="step-title">¿Cómo te contactamos? <small>(opcional)</small></h2>
           <p class="step-desc">Si deseas recibir actualizaciones sobre tu reporte, déjanos tus datos.</p>
           <div class="fields-row">
-            <div class="field"><label for="name">Nombre (Solo texto)</label><input id="name" v-model="form.reporter_name" type="text" pattern="[A-Za-zñÑáéíóúÁÉÍÓÚ ]+" title="Solo se permiten letras" placeholder="Tu nombre" /></div>
-            <div class="field"><label for="phone">Teléfono (Solo números)</label><input id="phone" v-model="form.reporter_phone" type="tel" pattern="[0-9]+" title="Solo se permiten números" placeholder="3001234567" /></div>
+            <div class="field"><label for="name">Nombre (Solo texto)</label><input id="name" name="reporter_name" v-model="form.reporter_name" type="text" autocomplete="name" pattern="[A-Za-zñÑáéíóúÁÉÍÓÚ ]+" title="Solo se permiten letras" placeholder="Tu nombre" /></div>
+            <div class="field"><label for="phone">Teléfono (Solo números)</label><input id="phone" name="reporter_phone" v-model="form.reporter_phone" type="tel" autocomplete="tel" pattern="[0-9]+" title="Solo se permiten números" placeholder="3001234567" /></div>
           </div>
           <div class="field" style="margin-top: 14px;">
             <label for="email">Correo electrónico</label>
-            <input id="email" v-model="form.reporter_email" type="email" placeholder="Para recibir la encuesta de satisfacción" />
+            <input id="email" name="reporter_email" v-model="form.reporter_email" type="email" autocomplete="email" placeholder="Para recibir la encuesta de satisfacción" />
           </div>
           <div class="step-nav" style="margin-top: 20px;">
             <button type="button" class="btn-ghost" @click="prevStep">← Atrás</button>

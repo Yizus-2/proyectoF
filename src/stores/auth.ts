@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api, getAuthToken, setAuthToken } from '@/lib/api'
 import type { AuthUser, UserRole } from '@/types/report'
+import { useReportsStore } from '@/stores/reports'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
@@ -61,6 +62,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function signOut() {
+    const reportsStore = useReportsStore()
+    reportsStore.reset()
     setAuthToken(null)
     user.value = null
     role.value = null

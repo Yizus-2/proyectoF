@@ -84,10 +84,13 @@ async function handleLogin() {
 
         <form @submit.prevent="handleLogin">
           <div class="field">
-            <label>Correo electrónico</label>
+            <label for="login-email">Correo electrónico</label>
             <input 
+              id="login-email"
+              name="email"
               v-model="email" 
               type="email" 
+              autocomplete="email"
               placeholder="usuario@essmar.gov.co" 
               required 
               :disabled="loading"
@@ -95,10 +98,13 @@ async function handleLogin() {
           </div>
           
           <div class="field">
-            <label>Contraseña</label>
+            <label for="login-password">Contraseña</label>
             <input 
+              id="login-password"
+              name="password"
               v-model="password" 
               type="password" 
+              autocomplete="current-password"
               placeholder="••••••••" 
               required 
               :disabled="loading"

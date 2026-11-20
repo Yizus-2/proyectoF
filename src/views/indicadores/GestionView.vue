@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, defineAsyncComponent } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, defineAsyncComponent } from 'vue'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useReportsStore } from '@/stores/reports'
+import { useToastStore } from '@/stores/toast'
 import type { Crew, Report, Zone } from '@/types/report'
 import LeafletMap from '@/components/common/LeafletMap.vue'
 import L from 'leaflet'
@@ -12,6 +13,26 @@ const EvidenciaForm = defineAsyncComponent(() => import('@/views/operario/Eviden
 
 const reportsStore = useReportsStore()
 const auth = useAuthStore()
+const toastStore = useToastStore()
+
+const CATEGORY_LABELS: Record<string, string> = {
+  fuga_agua: 'Fuga de Agua',
+  fuga_alcantarillado: 'Alcantarillado',
+  tuberia_rota: 'Tubería Rota',
+  dano_pavimento: 'Daño Vial',
+  dano_infraestructura: 'Infraestructura',
+  otro: 'Otro'
+}
+
+function formatCategory(cat: string) {
+  return CATEGORY_LABELS[cat] || cat.replace(/_/g, ' ')
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && showModal.value) {
+    closeModal()
+  }
+}
 
 const loading = computed(() => reportsStore.loading)
 const errorMsg = computed(() => reportsStore.error || '')
@@ -208,19 +229,26 @@ async function saveManagement() {
 }
 
 function onEvidenceSuccess() {
-  alert('Evidencia subida correctamente. El reporte ha sido actualizado.')
+  toastStore.addToast({
+    title: 'Evidencia registrada',
+    message: 'La evidencia se guardó correctamente y el estado del reporte fue actualizado.',
+    type: 'success'
+  })
   reportsStore.fetchReports()
   loadCuadrillas()
   closeModal()
 }
 
 onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
   loadZones()
   loadCuadrillas()
-  if (reportsStore.reports.length === 0) {
-    reportsStore.fetchReports()
-  }
+  reportsStore.fetchReports()
   reportsStore.subscribeToReports()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 function formatDate(dateStr: string) {
@@ -266,15 +294,18 @@ function getSlaStatus(report: Report) {
       </div>
       
       <div class="filter-group">
-        <select v-model="reportsStore.filterDate" class="filter-btn" style="border: 1px solid var(--stroke); margin-right: 8px;">
+        <label for="gestion-date-filter" class="sr-only">Filtrar por fecha</label>
+        <select id="gestion-date-filter" name="filterDate" v-model="reportsStore.filterDate" class="filter-btn filter-select">
           <option value="ALL">🗓️ Histórico Total</option>
           <option value="TODAY">📍 Solo Hoy</option>
           <option value="WEEK">📅 Esta Semana</option>
           <option value="MONTH">📊 Este Mes</option>
         </select>
-        <button class="filter-btn" :class="{ active: filterStatus === 'ACTIVOS' }" @click="filterStatus = 'ACTIVOS'">Activos</button>
-        <button class="filter-btn" :class="{ active: filterStatus === 'CERRADOS' }" @click="filterStatus = 'CERRADOS'">Cerrados</button>
-        <button class="filter-btn" :class="{ active: filterStatus === 'TODOS' }" @click="filterStatus = 'TODOS'">Todos</button>
+        <div class="filter-tabs">
+          <button class="filter-btn" :class="{ active: filterStatus === 'ACTIVOS' }" @click="filterStatus = 'ACTIVOS'">Activos</button>
+          <button class="filter-btn" :class="{ active: filterStatus === 'CERRADOS' }" @click="filterStatus = 'CERRADOS'">Cerrados</button>
+          <button class="filter-btn" :class="{ active: filterStatus === 'TODOS' }" @click="filterStatus = 'TODOS'">Todos</button>
+        </div>
       </div>
     </header>
 
@@ -339,7 +370,7 @@ function getSlaStatus(report: Report) {
             
             <div class="list-col col-meta">
               <div class="meta-item">
-                <span>{{ report.category.replace('_', ' ') }}</span>
+                <span>{{ formatCategory(report.category) }}</span>
               </div>
               <div class="meta-item time">
                 <span>{{ formatDate(report.created_at) }}</span>
@@ -376,8 +407,9 @@ function getSlaStatus(report: Report) {
     </div>
 
     <!-- Modal de Gestión -->
-    <div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
+    <div v-if="showModal" class="modal-backdrop" role="dialog" aria-modal="true" @click.self="closeModal">
       <div class="modal-content">
+        <button type="button" class="modal-close-btn" aria-label="Cerrar modal" @click="closeModal">✕</button>
         <!-- Formulario regular o Formulario de Evidencia -->
         <div v-if="!showEvidenceForm">
           <h2>Gestionar Reporte</h2>
@@ -386,8 +418,8 @@ function getSlaStatus(report: Report) {
           <form @submit.prevent="saveManagement" class="modal-form">
             <!-- Selección de Estado (Solo Admin/Supervisor) -->
             <div class="field" v-if="auth.isAdmin || auth.isSupervisor">
-              <label>Estado actual</label>
-              <select v-model="manageForm.status" required>
+              <label for="manage-status">Estado actual</label>
+              <select id="manage-status" name="status" v-model="manageForm.status" required>
                 <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
                 <option v-if="auth.isAdmin" value="CLASIFICADO">CLASIFICADO</option>
                 <option v-if="auth.isAdmin" value="ASIGNADO">ASIGNADO (Despachar cuadrilla)</option>
@@ -405,9 +437,9 @@ function getSlaStatus(report: Report) {
 
             <!-- Asignación de Cuadrilla (Admin) -->
             <div class="field" v-if="auth.isAdmin">
-              <label>Cuadrilla Asignada</label>
+              <label for="manage-crew">Cuadrilla Asignada</label>
               <div class="input-action-row">
-                <select v-model="manageForm.work_order">
+                <select id="manage-crew" name="work_order" v-model="manageForm.work_order">
                   <option value="">— Auto-asignar según zona —</option>
                   <option v-for="c in cuadrillas" :key="c.id" :value="c.name">
                     {{ c.name }} (Carga: {{ c.workload }}/3)
@@ -428,8 +460,8 @@ function getSlaStatus(report: Report) {
             
             <!-- Vista de solo lectura para el operario -->
             <div class="field" v-else-if="manageForm.work_order">
-              <label>Cuadrilla Asignada</label>
-              <input type="text" :value="manageForm.work_order" disabled style="background: var(--bg-body);" />
+              <label for="manage-crew-readonly">Cuadrilla Asignada</label>
+              <input id="manage-crew-readonly" name="work_order_readonly" type="text" :value="manageForm.work_order" disabled style="background: var(--bg-body);" />
             </div>
 
             <!-- Subir Evidencia (SOLO Operario) -->
@@ -446,9 +478,11 @@ function getSlaStatus(report: Report) {
               </button>
             </div>
 
-            <div class="modal-actions" v-if="auth.isAdmin || auth.isSupervisor">
-              <button type="button" class="btn-ghost" @click="closeModal" :disabled="isUpdating">Cancelar</button>
-              <button type="submit" class="btn-primary" :disabled="isUpdating">
+            <div class="modal-actions">
+              <button type="button" class="btn-ghost" @click="closeModal" :disabled="isUpdating">
+                {{ auth.isAdmin || auth.isSupervisor ? 'Cancelar' : 'Cerrar' }}
+              </button>
+              <button v-if="auth.isAdmin || auth.isSupervisor" type="submit" class="btn-primary" :disabled="isUpdating">
                 {{ isUpdating ? 'Guardando...' : 'Guardar Cambios' }}
               </button>
             </div>
@@ -475,6 +509,11 @@ function getSlaStatus(report: Report) {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  width: 100%;
+  max-width: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .section-header {
@@ -499,10 +538,28 @@ function getSlaStatus(report: Report) {
 
 .filter-group {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   background: var(--card);
   border: 1px solid var(--stroke);
   border-radius: 12px;
-  padding: 4px;
+  padding: 6px;
+  max-width: 100%;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  width: auto;
+  min-width: 165px;
+  border: 1px solid var(--stroke) !important;
+  background: var(--bg-subtle) !important;
+  color: var(--text) !important;
 }
 
 .filter-btn {
@@ -541,7 +598,7 @@ function getSlaStatus(report: Report) {
   position: absolute;
   top: 16px;
   right: 16px;
-  z-index: 1000;
+  z-index: 20;
   background: var(--card);
   opacity: 0.95;
   backdrop-filter: blur(8px);
@@ -582,7 +639,7 @@ function getSlaStatus(report: Report) {
 
 .list-header {
   display: grid;
-  grid-template-columns: 180px 2fr 1.2fr 180px 180px;
+  grid-template-columns: 170px minmax(0, 2fr) 160px 180px 160px;
   gap: 16px;
   padding: 0 16px 8px 16px;
   border-bottom: 2px solid var(--stroke);
@@ -595,7 +652,7 @@ function getSlaStatus(report: Report) {
 
 .report-list-item {
   display: grid;
-  grid-template-columns: 180px 2fr 1.2fr 180px 180px;
+  grid-template-columns: 170px minmax(0, 2fr) 160px 180px 160px;
   gap: 16px;
   align-items: center;
   background: var(--card);
@@ -603,6 +660,7 @@ function getSlaStatus(report: Report) {
   border-radius: 12px;
   padding: 16px;
   transition: all 0.2s ease;
+  max-width: 100%;
 }
 
 .report-list-item:hover {
@@ -791,6 +849,7 @@ function getSlaStatus(report: Report) {
 }
 
 .modal-content {
+  position: relative;
   background: var(--card);
   border-radius: 20px;
   padding: 32px;
@@ -799,6 +858,28 @@ function getSlaStatus(report: Report) {
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s;
+}
+.modal-close-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .modal-content h2 { margin: 0 0 4px; font-size: 1.4rem; }
@@ -891,18 +972,26 @@ function getSlaStatus(report: Report) {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-@media (max-width: 600px) {
-  .page-header { flex-direction: column; align-items: stretch; }
-  .filter-group { width: 100%; }
-  .filter-btn { flex: 1; text-align: center; font-size: .85rem; }
-  .map-container { height: 280px; }
+@media (max-width: 900px) {
+  .management-section { padding: 14px; }
+  .section-header { flex-direction: column; align-items: stretch; }
+  .filter-group { width: 100%; flex-direction: column; align-items: stretch; }
+  .filter-select { width: 100%; min-width: 0; }
+  .filter-tabs { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
+  .filter-btn { text-align: center; font-size: .85rem; padding: 8px 10px; }
+  .map-container { height: 260px; }
+  .list-header { display: none; }
   .reports-list {
     display: flex;
     flex-direction: column;
   }
-  .report-list-item, .list-header {
+  .report-list-item {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 10px;
+    padding: 14px;
+  }
+  .col-action {
+    align-items: stretch;
   }
   .input-action-row {
     flex-direction: column;

@@ -348,13 +348,19 @@ function closeMobile() {
     backdrop-filter: blur(24px) saturate(1.8);
     -webkit-backdrop-filter: blur(24px) saturate(1.8);
     transform: translateX(100%);
-    transition: transform 0.35s var(--ease-out-expo);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 0.35s var(--ease-out-expo), visibility 0.35s;
     overflow-y: auto;
     z-index: 99;
     border-left: 1px solid rgba(255, 255, 255, 0.05);
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.25);
   }
-  .navbar__nav.is-open { transform: translateX(0); }
+  .navbar__nav.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
 
   .navbar__links {
     flex-direction: column;

@@ -99,6 +99,15 @@ export const useReportsStore = defineStore('reports', () => {
     }
   }
 
+  function reset() {
+    unsubscribe()
+    reports.value = []
+    zonesData.value = []
+    filterDate.value = 'ALL'
+    kpiFilter.value = 'ALL'
+    error.value = null
+  }
+
   // KPIs reales (sin valores falsos hardcodeados)
   const kpis = computed(() => {
     const list = filteredReports.value
@@ -244,6 +253,7 @@ export const useReportsStore = defineStore('reports', () => {
     fetchReports,
     subscribeToReports,
     unsubscribe,
+    reset,
     kpis,
     trendStats,
     priorityStats,

@@ -6,6 +6,8 @@
 
   /* ─── Page Background ─── */
   --page-bg: #f4f2fb;
+  --bg: var(--page-bg);
+  --bg-body: var(--page-bg);
   --bg-subtle: #ece8f6;
   --card: #ffffff;
   --card-hover: #faf9fd;
@@ -31,6 +33,7 @@
 
   /* ─── Status Semantics ─── */
   --success: #0fac6e;
+  --emerald: var(--success);
   --success-soft: rgba(15, 172, 110, 0.1);
   --danger: #e43f3f;
   --danger-soft: rgba(228, 63, 63, 0.08);
@@ -84,11 +87,12 @@
   --accent-light: #5eead4;
   --accent-soft: rgba(52, 232, 208, 0.1);
 
-  --gradient-brand: linear-gradient(135deg, #a78bfa 0%, #34e8d0 100%);
-  --gradient-accent: linear-gradient(135deg, #34e8d0 0%, #5eead4 100%);
+  --gradient-brand: linear-gradient(135deg, #4c2fa6 0%, #0b8a78 100%);
+  --gradient-accent: linear-gradient(135deg, #0b8a78 0%, #0d9488 100%);
   --gradient-glass: linear-gradient(135deg, rgba(28,22,54,0.8), rgba(28,22,54,0.4));
 
   --success: #34d89a;
+  --emerald: var(--success);
   --success-soft: rgba(52, 216, 154, 0.1);
   --danger: #f87171;
   --danger-soft: rgba(248, 113, 113, 0.08);

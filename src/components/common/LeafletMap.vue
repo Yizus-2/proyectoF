@@ -18,11 +18,13 @@ const emit = defineEmits<{
 const mapContainer = shallowRef<HTMLElement | null>(null)
 const map = shallowRef<L.Map | null>(null)
 
-// Arreglar íconos de leaflet en Vite/Vue
+// Arreglar íconos de leaflet en Vite/Vue (evitar duplicación de imagePath)
 import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png'
 import iconUrl from 'leaflet/dist/images/marker-icon.png'
 import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
 
+delete (L.Icon.Default.prototype as any)._getIconUrl
+L.Icon.Default.imagePath = ''
 L.Icon.Default.mergeOptions({
   iconRetinaUrl,
   iconUrl,

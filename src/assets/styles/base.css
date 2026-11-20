@@ -19,6 +19,7 @@ body {
   line-height: 1.6;
   font-size: 14px;
   background-color: var(--page-bg);
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition: color var(--transition), background-color var(--transition-slow);

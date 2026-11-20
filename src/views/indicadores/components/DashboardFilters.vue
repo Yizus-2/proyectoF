@@ -91,8 +91,8 @@ const riesgos = [
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 220px;
+  min-width: 220px;
 }
 
 .filter-group label {
