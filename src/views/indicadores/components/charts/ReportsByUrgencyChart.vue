@@ -13,7 +13,7 @@ const datos = computed(() => {
   
   reports.forEach(r => {
     // Solo contar reportes activos
-    if (!['completado', 'rechazado', 'cerrado', 'resuelto'].includes(r.status.toLowerCase())) {
+    if (!['completado', 'rechazado', 'cerrado', 'resuelto', 'evaluado'].includes(r.status.toLowerCase())) {
       const p = r.priority?.toLowerCase() || 'media'
       if (counts[p] !== undefined) counts[p]++
     }

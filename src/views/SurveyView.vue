@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
+import type { PublicTrackedReport } from '@/types/report'
 
 const route = useRoute()
 const trackingCode = route.params.code as string
@@ -11,7 +12,7 @@ const submitting = ref(false)
 const errorMsg = ref('')
 const success = ref(false)
 
-const reportData = ref<{ id: number, category: string, status: string, address: string } | null>(null)
+const reportData = ref<PublicTrackedReport | null>(null)
 
 const form = ref({
   score: 0,
@@ -21,19 +22,14 @@ const form = ref({
 async function fetchReport() {
   loading.value = true
   try {
-    const { data, error } = await supabase
-      .from('reports')
-      .select('id, category, status, address')
-      .eq('tracking_code', trackingCode)
-      .single()
+    const { report } = await api.get<{ report: PublicTrackedReport }>(
+      `/api/reports/track/${encodeURIComponent(trackingCode)}`
+    )
+    reportData.value = report
 
-    if (error) throw error
-    reportData.value = data
-
-    // Si ya está evaluado, mostramos éxito directamente o bloqueamos
-    if (data.status === 'EVALUADO') {
+    if (report.status === 'EVALUADO') {
       errorMsg.value = 'Este reporte ya ha sido evaluado previamente. ¡Gracias!'
-    } else if (data.status !== 'CERRADO') {
+    } else if (report.status !== 'CERRADO') {
       errorMsg.value = 'Este reporte aún no está cerrado o no requiere evaluación.'
     }
   } catch (e: any) {
@@ -49,16 +45,14 @@ async function submitSurvey() {
     alert('Por favor selecciona una calificación de 1 a 5 estrellas.')
     return
   }
-  
+
   submitting.value = true
   try {
-    const { error } = await supabase.from('ratings').insert({
-      report_id: reportData.value!.id,
+    await api.post('/api/ratings', {
+      tracking_code: trackingCode,
       score: form.value.score,
       comment: form.value.comment || null
     })
-
-    if (error) throw error
     success.value = true
   } catch (e: any) {
     console.error(e)

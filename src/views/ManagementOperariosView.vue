@@ -1,31 +1,29 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
-import { UsersIcon, MapPinIcon, BriefcaseIcon, CheckBadgeIcon } from '@heroicons/vue/24/outline'
+import { api } from '@/lib/api'
+import type { Crew, Zone } from '@/types/report'
+import {
+  UsersIcon,
+  MapPinIcon,
+  BriefcaseIcon,
+  CheckBadgeIcon,
+  ExclamationTriangleIcon
+} from '@heroicons/vue/24/outline'
 
-// Types
 interface Operario {
   id: string
   email: string
-  full_name: string
+  full_name: string | null
   role: string
   zone_id: number | null
   crew_id: number | null
 }
 
-interface Cuadrilla {
-  id: number
-  name: string
-  workload: number
-  zone_id: number | null
-}
-
 const operarios = ref<Operario[]>([])
-const cuadrillas = ref<Cuadrilla[]>([])
-const zones = ref<any[]>([])
+const cuadrillas = ref<Crew[]>([])
+const zones = ref<Zone[]>([])
 const loading = ref(true)
 
-// Modal state
 const showModal = ref(false)
 const selectedOperario = ref<Operario | null>(null)
 const editForm = ref({
@@ -36,49 +34,39 @@ const isUpdating = ref(false)
 async function loadData() {
   loading.value = true
   try {
-    // 1. Cargar zonas
-    const { data: zData } = await supabase.from('zones').select('*')
-    if (zData) zones.value = zData
-
-    // 2. Cargar operarios (profiles)
-    const { data: oData } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('role', ['operator', 'supervisor']) // Suponiendo que estos son los que van a campo
-    if (oData) operarios.value = oData
-
-    // 3. Cargar cuadrillas
-    async function loadCuadrillas() {
-      const { data } = await supabase.from('crews').select('id, name').order('name')
-      if (data) cuadrillas.value = data
-    }
-    await loadCuadrillas()
-
+    const [zData, oData, cData] = await Promise.all([
+      api.get<Zone[]>('/api/zones'),
+      api.get<Operario[]>('/api/operators'),
+      api.get<Crew[]>('/api/crews')
+    ])
+    zones.value = zData
+    operarios.value = oData
+    cuadrillas.value = cData
   } catch (err) {
-    console.error("Error cargando operarios:", err)
+    console.error('Error cargando operarios:', err)
   } finally {
     loading.value = false
   }
 }
 
 const cuadrillasWithZones = computed(() => {
-  return cuadrillas.value.map(c => {
-    const zona = zones.value.find(z => z.id === c.zone_id)
+  return cuadrillas.value.map((c) => {
+    const zona = zones.value.find((z) => z.id === c.zone_id)
     return {
       ...c,
-      zona_nombre: zona ? zona.name : 'Sin Zona Asignada'
+      zona_nombre: zona ? zona.name : c.zone_name || 'Sin Zona Asignada'
     }
   })
 })
 
 function getZoneName(zoneId: number | null) {
   if (!zoneId) return 'Sin Zona'
-  return zones.value.find(z => z.id === zoneId)?.name || 'Desconocida'
+  return zones.value.find((z) => z.id === zoneId)?.name || 'Desconocida'
 }
 
 function getCuadrillaName(crewId: number | null) {
   if (!crewId) return 'N/A'
-  return cuadrillas.value.find(c => c.id === crewId)?.name || 'Desconocida'
+  return cuadrillas.value.find((c) => c.id === crewId)?.name || 'Desconocida'
 }
 
 function openEditModal(op: Operario) {
@@ -96,21 +84,17 @@ async function saveOperario() {
   if (!selectedOperario.value) return
   isUpdating.value = true
   try {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ zone_id: editForm.value.zone_id })
-      .eq('id', selectedOperario.value.id)
+    const updated = await api.patch<Operario>(`/api/operators/${selectedOperario.value.id}`, {
+      zone_id: editForm.value.zone_id
+    })
 
-    if (error) throw error
-
-    // Update local state
-    const index = operarios.value.findIndex(o => o.id === selectedOperario.value!.id)
+    const index = operarios.value.findIndex((o) => o.id === selectedOperario.value!.id)
     if (index !== -1) {
-      operarios.value[index].zone_id = editForm.value.zone_id
+      operarios.value[index].zone_id = updated.zone_id
     }
     closeModal()
   } catch (err: any) {
-    alert("Error al actualizar operario: " + err.message)
+    alert('Error al actualizar operario: ' + err.message)
   } finally {
     isUpdating.value = false
   }

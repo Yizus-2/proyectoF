@@ -1,67 +1,74 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
-import type { User, Session } from '@supabase/supabase-js'
+import { api, getAuthToken, setAuthToken } from '@/lib/api'
+import type { AuthUser, UserRole } from '@/types/report'
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
-  const session = ref<Session | null>(null)
-  const role = ref<string | null>(null)
+  const user = ref<AuthUser | null>(null)
+  const role = ref<UserRole | null>(null)
   const loading = ref(true)
+  let initPromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => !!user.value)
-  const userEmail = computed(() => user.value?.email)
-  
+  const userEmail = computed(() => user.value?.email ?? '')
+
   const isAdmin = computed(() => role.value === 'admin')
   const isSupervisor = computed(() => role.value === 'supervisor' || role.value === 'admin')
-  const isOperator = computed(() => role.value === 'operator' || role.value === 'supervisor' || role.value === 'admin')
+  const isOperator = computed(
+    () => role.value === 'operator' || role.value === 'supervisor' || role.value === 'admin'
+  )
   const isCitizen = computed(() => role.value === 'citizen')
 
   async function initialize() {
-    if (loading.value === false) return // Already initialized
-    loading.value = true
-    try {
-      const { data } = await supabase.auth.getSession()
-      session.value = data.session
-      user.value = data.session?.user ?? null
-      if (user.value) await fetchProfile()
-      
-      supabase.auth.onAuthStateChange(async (_event, _session) => {
-        session.value = _session
-        user.value = _session?.user ?? null
-        if (user.value) await fetchProfile()
-        else role.value = null
-      })
-    } catch (err) {
-      console.error('Failed to initialize Supabase Auth:', err)
-    } finally {
-      loading.value = false
-    }
+    if (!loading.value) return
+    if (initPromise) return initPromise
+
+    initPromise = (async () => {
+      loading.value = true
+      try {
+        const token = getAuthToken()
+        if (!token) {
+          user.value = null
+          role.value = null
+          return
+        }
+        const { user: me } = await api.get<{ user: AuthUser }>('/api/auth/me')
+        user.value = me
+        role.value = me.role
+      } catch {
+        setAuthToken(null)
+        user.value = null
+        role.value = null
+      } finally {
+        loading.value = false
+        initPromise = null
+      }
+    })()
+
+    return initPromise
   }
 
-  async function fetchProfile() {
-    if (!user.value) return
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.value.id)
-      .single()
-    
-    if (!error && data) {
-      role.value = data.role
-    }
+  async function signIn(email: string, password: string): Promise<AuthUser> {
+    const { token, user: loggedUser } = await api.post<{ token: string; user: AuthUser }>(
+      '/api/auth/login',
+      { email, password }
+    )
+    setAuthToken(token)
+    user.value = loggedUser
+    role.value = loggedUser.role
+    loading.value = false
+    return loggedUser
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    setAuthToken(null)
     user.value = null
-    session.value = null
     role.value = null
   }
 
   return {
     user,
-    session,
+    role,
     loading,
     isAuthenticated,
     userEmail,
@@ -69,8 +76,8 @@ export const useAuthStore = defineStore('auth', () => {
     isSupervisor,
     isOperator,
     isCitizen,
-    role,
     initialize,
+    signIn,
     signOut
   }
 })

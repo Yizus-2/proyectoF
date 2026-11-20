@@ -57,8 +57,8 @@ function closeMobile() {
         <div class="navbar__links">
           <RouterLink to="/reportar" class="navbar__link" @click="closeMobile">Reportar</RouterLink>
           <RouterLink v-if="!auth.isAdmin" to="/rastrear" class="navbar__link" @click="closeMobile">Consultar</RouterLink>
-          <RouterLink v-if="auth.isOperator && !auth.isAdmin" to="/gestion" class="navbar__link" @click="closeMobile">Mi Gestión</RouterLink>
-          <RouterLink v-if="auth.isAdmin" to="/indicadores" class="navbar__link" @click="closeMobile">Indicadores</RouterLink>
+          <RouterLink v-if="auth.isOperator && !auth.isSupervisor" to="/gestion" class="navbar__link" @click="closeMobile">Mi Gestión</RouterLink>
+          <RouterLink v-if="auth.isSupervisor" to="/indicadores" class="navbar__link" @click="closeMobile">Indicadores</RouterLink>
           <RouterLink v-if="auth.isAdmin" to="/operarios" class="navbar__link" @click="closeMobile">Operarios</RouterLink>
         </div>
 

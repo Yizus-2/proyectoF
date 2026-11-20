@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue'
-import { useTheme } from '@/composables/useTheme'
 import { useAuthStore } from '@/stores/auth'
 import { useReportsStore } from '@/stores/reports'
 import DashboardFilters from './components/DashboardFilters.vue'
@@ -20,23 +19,9 @@ const indicadoresStore = useIndicadoresStore()
 const GestionView = defineAsyncComponent(() => import('./GestionView.vue'))
 const VerificacionPanel = defineAsyncComponent(() => import('../supervisor/VerificacionPanel.vue'))
 
-// Bindings to the centralized store
 const loading = computed(() => reportsStore.loading)
 const errorMsg = computed(() => reportsStore.error || '')
 const kpis = computed(() => reportsStore.kpis)
-const slaStats = computed(() => reportsStore.slaStats)
-const channelStats = computed(() => reportsStore.channelStats)
-const priorityStats = computed(() => reportsStore.priorityStats)
-const trendStats = computed(() => reportsStore.trendStats)
-const zonesData = computed(() => reportsStore.zonesData)
-const recentEvents = computed(() => reportsStore.recentEvents)
-
-const { isDark } = useTheme()
-
-function getThemeColor(variable: string) {
-  if (typeof document === 'undefined') return '#ccc'
-  return getComputedStyle(document.documentElement).getPropertyValue(variable).trim() || '#ccc'
-}
 
 async function loadDashboardData() {
   await reportsStore.fetchReports()
@@ -55,134 +40,6 @@ onMounted(() => {
 onUnmounted(() => {
   reportsStore.unsubscribe()
 })
-
-// Chart Data Definition
-const complianceChartData = computed(() => {
-  isDark.value
-  return {
-    labels: slaStats.value.map(s => s.label),
-    datasets: [{
-      backgroundColor: [
-        '#10b981', // A TIEMPO - Emerald
-        '#f59e0b', // RIESGO - Amber
-        '#ef4444', // VENCIDO - Red
-        '#3b82f6'  // FINALIZADO - Blue
-      ],
-      data: slaStats.value.map(s => s.value),
-      borderWidth: 0,
-      hoverOffset: 12
-    }]
-  }
-})
-
-const channelsChartData = computed(() => {
-  isDark.value
-  return {
-    labels: channelStats.value.map(c => c.label),
-    datasets: [{
-      label: 'Reportes',
-      backgroundColor: [
-        '#0284c7', '#0ea5e9', '#38bdf8', '#7dd3fc',
-        '#bae6fd', '#0369a1', '#075985', '#0c4a6e'
-      ],
-      data: channelStats.value.map(c => c.value),
-      borderWidth: 0,
-      borderRadius: 4
-    }]
-  }
-})
-
-const trendChartData = computed(() => {
-  isDark.value
-  return {
-    labels: trendStats.value.map(t => t.label),
-    datasets: [{
-      label: 'Reportes Diarios',
-      borderColor: '#8b5cf6',
-      backgroundColor: '#8b5cf6',
-      pointBackgroundColor: '#fff',
-      pointBorderColor: '#8b5cf6',
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      borderWidth: 3,
-      data: trendStats.value.map(t => t.value),
-      tension: 0.3
-    }]
-  }
-})
-
-const riskChartData = computed(() => {
-  isDark.value
-  return {
-    labels: priorityStats.value.map(p => p.label),
-    datasets: [{
-      label: 'Reportes',
-      backgroundColor: [
-        '#991b1b', // CRITICA - Dark Red
-        '#ef4444', // ALTA - Red
-        '#f59e0b', // MEDIA - Amber
-        '#10b981'  // BAJA - Emerald
-      ],
-      data: priorityStats.value.map(p => p.value),
-      borderRadius: 6
-    }]
-  }
-})
-
-const chartOptions = computed(() => {
-  isDark.value
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { 
-      legend: { 
-        position: 'bottom' as const, 
-        labels: { usePointStyle: true, padding: 16, color: getThemeColor('--text') } 
-      } 
-    },
-    scales: { 
-      y: { grid: { display: false }, ticks: { color: getThemeColor('--muted') } }, 
-      x: { grid: { display: false }, ticks: { color: getThemeColor('--muted') } } 
-    }
-  }
-})
-
-const horizontalBarOptions = computed(() => {
-  isDark.value
-  return {
-    indexAxis: 'y' as const,
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { 
-      legend: { display: false } 
-    },
-    scales: { 
-      x: { grid: { display: false }, ticks: { color: getThemeColor('--muted') } },
-      y: { grid: { display: false }, ticks: { color: getThemeColor('--text') } }
-    }
-  }
-})
-
-const doughnutOptions = computed(() => {
-  isDark.value
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { 
-      legend: { 
-        position: 'bottom' as const, 
-        labels: { usePointStyle: true, padding: 14, color: getThemeColor('--text') } 
-      } 
-    }
-  }
-})
-
-const icons = {
-  active: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>',
-  progress: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>',
-  done: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-  time: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>'
-}
 </script>
 
 <template>

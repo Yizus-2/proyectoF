@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 
 export function useCuadrillaAssignment() {
   const isAssigning = ref(false)
@@ -9,15 +9,8 @@ export function useCuadrillaAssignment() {
     isAssigning.value = true
     assignmentError.value = null
     try {
-      const { data, error } = await supabase.rpc('assign_crew_automatically', {
-        p_report_id: reportId
-      })
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      return data as number | null
+      const res = await api.post<{ crew_id: number | null }>(`/api/reports/${reportId}/assign-auto`)
+      return res.crew_id
     } catch (err: any) {
       console.error('Error assigning crew automatically:', err)
       assignmentError.value = err.message || 'Error al asignar cuadrilla automáticamente.'

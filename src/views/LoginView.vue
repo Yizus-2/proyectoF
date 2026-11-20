@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const auth = useAuthStore()
 
 const email = ref('')
 const password = ref('')
@@ -14,17 +15,18 @@ const errorMsg = ref('')
 async function handleLogin() {
   loading.value = true
   errorMsg.value = ''
-  
-  try {
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.value,
-      password: password.value
-    })
 
-    if (error) throw error
-    
-    const redirectPath = (route.query.redirect as string) || '/indicadores'
-    router.push(redirectPath)
+  try {
+    const user = await auth.signIn(email.value, password.value)
+
+    const defaultRoute =
+      user.role === 'admin' || user.role === 'supervisor'
+        ? '/indicadores'
+        : user.role === 'operator'
+          ? '/gestion'
+          : '/'
+    const redirectPath = (route.query.redirect as string) || defaultRoute
+    await router.push(redirectPath)
   } catch (err: any) {
     errorMsg.value = err.message || 'Error al iniciar sesión'
   } finally {

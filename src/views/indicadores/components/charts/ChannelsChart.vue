@@ -76,7 +76,7 @@ const chartOptions = {
     },
     y: {
       grid: { display: false },
-      ticks: { color: '#8a82a0', font: { weight: 'bold' } }
+      ticks: { color: '#8a82a0', font: { weight: 'bold' as const } }
     }
   }
 }

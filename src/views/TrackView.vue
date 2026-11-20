@@ -1,31 +1,27 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api, getAssetUrl } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
+import type { PublicTrackedReport, ReportHistory } from '@/types/report'
 
 const auth = useAuthStore()
 
 const trackingCode = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
-const reportData = ref<any>(null)
-const reportHistory = ref<any[]>([])
+const reportData = ref<PublicTrackedReport | null>(null)
+const reportHistory = ref<ReportHistory[]>([])
 
 const resolvedDate = computed(() => {
   if (!reportData.value || !['RESUELTO', 'CERRADO', 'EVALUADO'].includes(reportData.value.status)) return null
+  if (reportData.value.resolved_at) return reportData.value.resolved_at
   const ev = reportHistory.value.find(e => ['RESUELTO', 'CERRADO', 'EVALUADO'].includes(e.new_status))
   return ev ? ev.created_at : null
 })
 
-const photoUrl = computed(() => {
-  if (!reportData.value?.photo_path) return null
-  return supabase.storage.from('reports').getPublicUrl(reportData.value.photo_path).data.publicUrl
-})
+const photoUrl = computed(() => getAssetUrl(reportData.value?.photo_path))
 
-const evidenceUrl = computed(() => {
-  if (!reportData.value?.evidence_path) return null
-  return supabase.storage.from('reports').getPublicUrl(reportData.value.evidence_path).data.publicUrl
-})
+const evidenceUrl = computed(() => getAssetUrl(reportData.value?.evidence_path))
 
 const manageForm = ref({
   status: '',
@@ -76,29 +72,18 @@ async function saveManagement() {
   if (!reportData.value) return
   isUpdating.value = true
   try {
-    let evidencePath = undefined
+    const fd = new FormData()
+    fd.append('status', manageForm.value.status)
 
     if (manageForm.value.evidenceFile) {
       const compressedFile = await compressImage(manageForm.value.evidenceFile)
-      const ext = compressedFile.name.split('.').pop() || 'jpg'
-      const filePath = `evidence/${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`
-      const { error: upErr } = await supabase.storage.from('reports').upload(filePath, compressedFile)
-      if (upErr) throw upErr
-      evidencePath = filePath
+      fd.append('evidence', compressedFile)
     }
 
-    const payload: any = { status: manageForm.value.status }
-    if (evidencePath) payload.evidence_path = evidencePath
+    await api.patch(`/api/reports/${reportData.value.id}`, fd)
 
-    const { error } = await supabase
-      .from('reports')
-      .update(payload)
-      .eq('id', reportData.value.id)
-      
-    if (error) throw error
-    
     alert('Reporte actualizado exitosamente')
-    searchReport()
+    await searchReport()
   } catch (e: any) {
     console.error('Error updating status:', e)
     alert('Error al guardar: ' + e.message)
@@ -109,40 +94,28 @@ async function saveManagement() {
 
 async function searchReport() {
   if (!trackingCode.value) return
-  
+
   loading.value = true
   errorMsg.value = ''
   reportData.value = null
   reportHistory.value = []
 
   try {
-    const { data: report, error: reportErr } = await supabase
-      .from('reports')
-      .select('id, tracking_code, status, address, category, created_at, priority, photo_path, evidence_path, work_order')
-      .eq('tracking_code', trackingCode.value.trim().toUpperCase())
-      .single()
+    const code = encodeURIComponent(trackingCode.value.trim().toUpperCase())
+    const { report, history } = await api.get<{
+      report: PublicTrackedReport
+      history: ReportHistory[]
+    }>(`/api/reports/track/${code}`)
 
-    if (reportErr || !report) {
-      throw new Error('No se encontró ningún reporte con este código. Verifica que esté bien escrito (ej: REP-YYYYMMDD-0001).')
-    }
-    
     reportData.value = report
     manageForm.value.status = report.status
     manageForm.value.evidenceFile = null
     manageForm.value.evidencePreview = null
-
-    const { data: history, error: historyErr } = await supabase
-      .from('report_history')
-      .select('new_status, created_at, notes')
-      .eq('report_id', report.id)
-      .order('created_at', { ascending: false })
-
-    if (!historyErr && history) {
-      reportHistory.value = history
-    }
-
+    reportHistory.value = history || []
   } catch (e: any) {
-    errorMsg.value = e.message
+    errorMsg.value =
+      e.message ||
+      'No se encontró ningún reporte con este código. Verifica que esté bien escrito (ej: REP-YYYYMMDD-0001).'
   } finally {
     loading.value = false
   }

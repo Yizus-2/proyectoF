@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useIndicadoresStore } from '@/stores/indicadores'
+import { useReportsStore } from '@/stores/reports'
 
 const store = useIndicadoresStore()
+const reportsStore = useReportsStore()
 
 const periodos = [
   { label: 'Hoy', value: 'hoy' },
@@ -12,27 +15,25 @@ const periodos = [
 
 const categorias = [
   { label: '🌊 Todas las Categorías', value: 'todos' },
-  { label: '💧 Fugas de Agua', value: 'fuga' },
-  { label: '🚰 Medición de Presión', value: 'presion' },
-  { label: '🧯 Inventario de Hidrantes', value: 'hidrante' },
-  { label: '🏗️ Infraestructura', value: 'infraestructura' }
+  { label: '💧 Fugas de Agua', value: 'fuga_agua' },
+  { label: '🚰 Alcantarillado', value: 'fuga_alcantarillado' },
+  { label: '🔧 Tubería Rota', value: 'tuberia_rota' },
+  { label: '🛣️ Daño Vial / Pavimento', value: 'dano_pavimento' },
+  { label: '🏗️ Infraestructura', value: 'dano_infraestructura' },
+  { label: '📋 Otros', value: 'otro' }
 ]
 
-const zonas = [
-  { label: '🌍 Todas las Zonas', value: 'todas' },
-  { label: 'Norte', value: 'norte' },
-  { label: 'Centro', value: 'centro' },
-  { label: 'Sur', value: 'sur' },
-  { label: 'Oriente', value: 'oriente' },
-  { label: 'Occidente', value: 'occidente' }
-]
+const zonas = computed(() => [
+  { label: '🌍 Todas las Zonas', value: 'todas' as const },
+  ...reportsStore.zones.map((z) => ({ label: z.name, value: z.id }))
+])
 
 const riesgos = [
   { label: 'Todos los niveles', value: 'todos' },
-  { label: '🔴 Crítico (< 30 min)', value: 'critica' },
-  { label: '🟠 Alto (< 2h)', value: 'alta' },
-  { label: '🟡 Medio (< 8h)', value: 'media' },
-  { label: '🟢 Bajo (< 24h)', value: 'baja' }
+  { label: '🔴 Crítico (< 30 min)', value: 'CRITICA' },
+  { label: '🟠 Alto (< 2h)', value: 'ALTA' },
+  { label: '🟡 Medio (< 8h)', value: 'MEDIA' },
+  { label: '🟢 Regular / Bajo (< 24h)', value: 'BAJA' }
 ]
 </script>
 

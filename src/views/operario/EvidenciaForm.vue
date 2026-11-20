@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import { useGeolocation } from '@/composables/useGeolocation'
-import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   reportId: number
@@ -14,7 +13,6 @@ const emit = defineEmits<{
   (e: 'cancel'): void
 }>()
 
-const auth = useAuthStore()
 const { lat, lng, error: geoError, loading: geoLoading, capture: captureGeo } = useGeolocation()
 
 const description = ref('')
@@ -79,53 +77,16 @@ async function submitEvidence() {
   errorMessage.value = ''
 
   try {
-    // 1. Compress & Upload photo
     const compressed = await compressImage(photoFile.value)
-    const ext = compressed.name.split('.').pop() || 'jpg'
-    const storagePath = `evidences/${props.reportId}-${Date.now()}.${ext}`
-    
-    const { error: uploadError } = await supabase.storage
-      .from('reports')
-      .upload(storagePath, compressed)
+    const fd = new FormData()
+    fd.append('photo', compressed)
+    fd.append('description', description.value.trim())
+    fd.append('materials', props.currentStatus === 'ASIGNADO' ? 'N/A (Llegada al sitio)' : materials.value)
+    fd.append('hours_spent', String(props.currentStatus === 'ASIGNADO' ? 0 : hoursSpent.value))
+    if (lat.value !== null) fd.append('lat', String(lat.value))
+    if (lng.value !== null) fd.append('lng', String(lng.value))
 
-    if (uploadError) throw new Error(`Error subiendo imagen: ${uploadError.message}`)
-
-    // 2. Get Public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('reports')
-      .getPublicUrl(storagePath)
-
-    // Insert Evidence Record
-    const { error: dbError } = await supabase
-      .from('evidences')
-      .insert({
-        report_id: props.reportId,
-        evidence_url: publicUrl,
-        description: description.value,
-        materials: props.currentStatus === 'ASIGNADO' ? 'N/A (Llegada al sitio)' : materials.value,
-        hours_spent: props.currentStatus === 'ASIGNADO' ? 0 : hoursSpent.value,
-        lat: lat.value || null,
-        lng: lng.value || null,
-        uploaded_by: auth.user?.id
-      })
-
-    if (dbError) throw dbError
-
-    // 4. Update Report Status based on current state
-    const nextStatus = props.currentStatus === 'ASIGNADO' ? 'EN_PROGRESO' : 'RESUELTO'
-    const updatePayload: any = { status: nextStatus }
-    
-    // Si es el final, guardamos el path
-    if (nextStatus === 'RESUELTO') {
-      updatePayload.evidence_path = storagePath
-    }
-
-    const { error: reportError } = await supabase
-      .from('reports')
-      .update(updatePayload)
-      .eq('id', props.reportId)
-
-    if (reportError) throw reportError
+    await api.post(`/api/reports/${props.reportId}/evidences`, fd)
 
     emit('success')
   } catch (err: any) {

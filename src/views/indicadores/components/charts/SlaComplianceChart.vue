@@ -36,22 +36,18 @@ const datos = computed(() => {
     }
   })
 
-  // Evitar NaN
-  if (aTiempo === 0 && vencidos === 0) {
-    aTiempo = 1
-  }
-
   const total = aTiempo + vencidos
-  const aTiempoPct = Math.round((aTiempo / total) * 100)
-  
-  return { aTiempo, vencidos, aTiempoPct }
+  const hasData = total > 0
+  const aTiempoPct = hasData ? Math.round((aTiempo / total) * 100) : 0
+
+  return { aTiempo, vencidos, aTiempoPct, hasData }
 })
 
 const chartData = computed(() => ({
-  labels: ['A tiempo', 'Vencidos'],
+  labels: datos.value.hasData ? ['A tiempo', 'Vencidos'] : ['Sin resueltos'],
   datasets: [{
-    data: [datos.value.aTiempo, datos.value.vencidos],
-    backgroundColor: ['#10b981', '#ef4444'],
+    data: datos.value.hasData ? [datos.value.aTiempo, datos.value.vencidos] : [1],
+    backgroundColor: datos.value.hasData ? ['#10b981', '#ef4444'] : ['#64748b'],
     borderWidth: 0,
     cutout: '75%'
   }]
@@ -85,8 +81,8 @@ const chartOptions = {
       <div class="doughnut-container">
         <Doughnut :data="chartData" :options="chartOptions" />
         <div class="center-metric">
-          <span class="pct">{{ datos.aTiempoPct }}%</span>
-          <span class="label">A tiempo</span>
+          <span class="pct">{{ datos.hasData ? `${datos.aTiempoPct}%` : '—' }}</span>
+          <span class="label">{{ datos.hasData ? 'A tiempo' : 'Sin datos' }}</span>
         </div>
       </div>
       

@@ -51,7 +51,7 @@ const getPeriodoText = () => {
       <!-- Tooltip Educativo -->
       <div class="kpi-tooltip-container" @mouseenter="showTooltip = true" @mouseleave="showTooltip = false">
         <button class="tooltip-btn" aria-label="Información del indicador">
-          <Info size="18" />
+          <Info :size="18" />
         </button>
         <div v-if="showTooltip" class="tooltip-content">
           <slot name="tooltip"></slot>

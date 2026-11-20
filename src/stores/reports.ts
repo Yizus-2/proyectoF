@@ -1,56 +1,60 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
-import type { Report } from '@/types/report'
+import { api } from '@/lib/api'
+import type { Report, Zone, ZoneAnalytics } from '@/types/report'
 import { useToastStore } from '@/stores/toast'
 
 export const useReportsStore = defineStore('reports', () => {
   const reports = ref<Report[]>([])
+  const zones = ref<Zone[]>([])
+  const zonesData = ref<ZoneAnalytics[]>([])
   const filterDate = ref<'ALL' | 'TODAY' | 'WEEK' | 'MONTH'>('ALL')
   const kpiFilter = ref<'ALL' | 'PENDING' | 'RESOLVED' | 'CRITICAL'>('ALL')
-  const zonesData = ref<any[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  let realtimeChannel: any = null
+  let eventSource: EventSource | null = null
 
   const filteredReports = computed(() => {
     if (filterDate.value === 'ALL') return reports.value
-    
+
     const now = new Date()
-    let startDate = new Date()
-    
+    const startDate = new Date()
+
     if (filterDate.value === 'TODAY') {
-      startDate.setHours(0,0,0,0)
+      startDate.setHours(0, 0, 0, 0)
     } else if (filterDate.value === 'WEEK') {
       startDate.setDate(now.getDate() - now.getDay())
-      startDate.setHours(0,0,0,0)
+      startDate.setHours(0, 0, 0, 0)
     } else if (filterDate.value === 'MONTH') {
       startDate.setDate(1)
-      startDate.setHours(0,0,0,0)
+      startDate.setHours(0, 0, 0, 0)
     }
 
-    return reports.value.filter(r => new Date(r.created_at) >= startDate)
+    return reports.value.filter((r) => new Date(r.created_at) >= startDate)
   })
+
+  async function fetchZones() {
+    try {
+      zones.value = await api.get<Zone[]>('/api/zones')
+    } catch (err) {
+      console.error('Error fetching zones:', err)
+    }
+  }
 
   async function fetchReports() {
     loading.value = true
     error.value = null
     try {
-      const { data, error: fetchErr } = await supabase
-        .from('reports')
-        .select('*')
-        .order('created_at', { ascending: false })
-      
-      if (fetchErr) throw fetchErr
-      reports.value = (data || []) as Report[]
-
-      // Fetch zone efficiency
-      const { data: zData } = await supabase.from('reports_by_zone').select('*')
-      if (zData) {
-        zonesData.value = zData
-      }
+      const [reportsRes, zonesRes, zoneAnalyticsRes] = await Promise.all([
+        api.get<Report[]>('/api/reports'),
+        api.get<Zone[]>('/api/zones'),
+        api.get<ZoneAnalytics[]>('/api/analytics/zones').catch(() => [] as ZoneAnalytics[])
+      ])
+      reports.value = reportsRes
+      zones.value = zonesRes
+      zonesData.value = zoneAnalyticsRes
     } catch (err: any) {
-      console.error('Error fetching reports from store:', err)
+      console.error('Error fetching reports from API:', err)
       error.value = err.message || 'Error al cargar los reportes'
     } finally {
       loading.value = false
@@ -58,82 +62,91 @@ export const useReportsStore = defineStore('reports', () => {
   }
 
   function subscribeToReports() {
-    if (realtimeChannel) return
-    realtimeChannel = supabase
-      .channel('public:reports_store')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, (payload) => {
+    if (eventSource || typeof EventSource === 'undefined') return
+    try {
+      eventSource = new EventSource(api.eventsUrl())
+
+      eventSource.addEventListener('report:created', (event) => {
         fetchReports()
-        
-        // Disparar toast para nuevos reportes críticos
-        if (payload.eventType === 'INSERT') {
-          const newReport = payload.new as Report
+        try {
+          const newReport = JSON.parse((event as MessageEvent).data) as Partial<Report>
           if (newReport.priority === 'CRITICA') {
             const toastStore = useToastStore()
             toastStore.addToast({
               title: '¡Nuevo Reporte Crítico!',
-              message: `PQR: ${newReport.tracking_code} - ${newReport.category.replace('_', ' ')}. Requiere atención inmediata.`,
+              message: `PQR: ${newReport.tracking_code || 'Nuevo'} - ${(newReport.category || '').replace('_', ' ')}. Requiere atención inmediata.`,
               type: 'error',
-              duration: 10000 // 10s para críticos
+              duration: 10000
             })
           }
+        } catch {
+          // Ignore malformed SSE payload
         }
       })
-      .subscribe()
-  }
 
-  function unsubscribe() {
-    if (realtimeChannel) {
-      supabase.removeChannel(realtimeChannel)
-      realtimeChannel = null
+      eventSource.addEventListener('report:updated', () => {
+        fetchReports()
+      })
+    } catch (err) {
+      console.warn('SSE realtime connection unavailable:', err)
     }
   }
 
-  // KPIs computed
+  function unsubscribe() {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
+  }
+
+  // KPIs reales (sin valores falsos hardcodeados)
   const kpis = computed(() => {
     const list = filteredReports.value
-    
     const total = list.length
-    
-    const pending = list.filter(r => 
-      ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO', 'EVIDENCIA_PENDIENTE', 'VERIFICACION_SUPERVISOR'].includes(r.status)
+
+    const pending = list.filter((r) =>
+      [
+        'REPORTADO',
+        'CLASIFICADO',
+        'ASIGNADO',
+        'EN_PROGRESO',
+        'EVIDENCIA_PENDIENTE',
+        'VERIFICACION_SUPERVISOR'
+      ].includes(r.status)
     ).length
 
-    const now = new Date()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const resolved = list.filter(r => 
-      ['RESUELTO', 'CERRADO', 'EVALUADO'].includes(r.status) &&
-      r.resolved_at && new Date(r.resolved_at) >= startOfMonth
+    const resolved = list.filter((r) => ['RESUELTO', 'CERRADO', 'EVALUADO'].includes(r.status)).length
+
+    const critical = list.filter(
+      (r) =>
+        ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO'].includes(r.status) &&
+        r.priority === 'CRITICA'
     ).length
 
-    const critical = list.filter(r => 
-      ['REPORTADO', 'CLASIFICADO', 'ASIGNADO', 'EN_PROGRESO'].includes(r.status) && 
-      r.priority === 'CRITICA'
-    ).length
-
-    const resolvedList = list.filter(r => r.resolved_at && r.created_at)
-    let avgTime = 0
+    const resolvedList = list.filter((r) => r.resolved_at && r.created_at)
+    let avgTime: number | null = null
     if (resolvedList.length > 0) {
       const totalHours = resolvedList.reduce((acc, r) => {
         const diff = new Date(r.resolved_at!).getTime() - new Date(r.created_at).getTime()
-        return acc + (diff / (1000 * 60 * 60))
+        return acc + Math.max(0, diff / (1000 * 60 * 60))
       }, 0)
       avgTime = Math.round((totalHours / resolvedList.length) * 10) / 10
-    } else {
-      avgTime = 4.2
     }
 
     return { total, pending, resolved, critical, avgTime }
   })
 
-  // Trend statistics (last 7 days)
+  // Tendencia últimos 7 días
   const trendStats = computed(() => {
-    const last7Days = [...Array(7)].map((_, i) => {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      return d.toISOString().split('T')[0]
-    }).reverse()
-    const tCounts = Object.fromEntries(last7Days.map(d => [d, 0]))
-    filteredReports.value.forEach(r => {
+    const last7Days = [...Array(7)]
+      .map((_, i) => {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        return d.toISOString().split('T')[0]
+      })
+      .reverse()
+    const tCounts = Object.fromEntries(last7Days.map((d) => [d, 0]))
+    filteredReports.value.forEach((r) => {
       const date = r.created_at.split('T')[0]
       if (tCounts[date] !== undefined) tCounts[date]++
     })
@@ -143,34 +156,41 @@ export const useReportsStore = defineStore('reports', () => {
     })
   })
 
-  // Priority Stats
+  // Estadísticas por prioridad
   const priorityStats = computed(() => {
-    const countsPriority: Record<string, number> = { 'CRITICA': 0, 'ALTA': 0, 'MEDIA': 0, 'BAJA': 0 }
-    filteredReports.value.forEach(r => {
+    const countsPriority: Record<string, number> = { CRITICA: 0, ALTA: 0, MEDIA: 0, BAJA: 0 }
+    filteredReports.value.forEach((r) => {
       if (countsPriority[r.priority] !== undefined) countsPriority[r.priority]++
     })
     return Object.entries(countsPriority).map(([label, value]) => ({ label, value }))
   })
 
-  // Channel Stats
+  // Estadísticas por canal
   const channelStats = computed(() => {
     const countsChannels: Record<string, number> = {
-      'APP_MOVIL': 0, 'WEB': 0, 'WHATSAPP': 0, 'TELEFONO': 0,
-      'CORREO': 0, 'PRESENCIAL': 0, 'BOTON_EMERGENCIA': 0
+      APP_MOVIL: 0,
+      WEB: 0,
+      WHATSAPP: 0,
+      TELEFONO: 0,
+      CORREO: 0,
+      PRESENCIAL: 0,
+      BOTON_EMERGENCIA: 0,
+      OFFLINE: 0
     }
-    filteredReports.value.forEach(r => {
+    filteredReports.value.forEach((r) => {
       const src = r.source || 'WEB'
       if (countsChannels[src] !== undefined) countsChannels[src]++
     })
-    
+
     const channelMapping: Record<string, string> = {
-      'APP_MOVIL': 'App Móvil',
-      'WEB': 'Portal Web',
-      'WHATSAPP': 'WhatsApp',
-      'TELEFONO': 'Línea Telefónica',
-      'CORREO': 'Correo Electrónico',
-      'PRESENCIAL': 'Oficina Física',
-      'BOTON_EMERGENCIA': 'Botón Emergencia'
+      APP_MOVIL: 'App Móvil',
+      WEB: 'Portal Web',
+      WHATSAPP: 'WhatsApp',
+      TELEFONO: 'Línea Telefónica',
+      CORREO: 'Correo Electrónico',
+      PRESENCIAL: 'Oficina Física',
+      BOTON_EMERGENCIA: 'Botón Emergencia',
+      OFFLINE: 'Modo Offline'
     }
 
     return Object.entries(countsChannels).map(([key, value]) => ({
@@ -179,12 +199,27 @@ export const useReportsStore = defineStore('reports', () => {
     }))
   })
 
-  // SLA Stats
+  // Estadísticas SLA reales basadas en sla_hours de la zona
   const slaStats = computed(() => {
-    const countsSla: Record<string, number> = { 'A TIEMPO': 0, 'RIESGO': 0, 'VENCIDO': 0, 'FINALIZADO': 0 }
-    filteredReports.value.forEach(r => {
+    const countsSla: Record<string, number> = {
+      'A TIEMPO': 0,
+      RIESGO: 0,
+      VENCIDO: 0,
+      FINALIZADO: 0
+    }
+    const zoneMap = new Map(zones.value.map((z) => [z.id, z.sla_hours]))
+
+    filteredReports.value.forEach((r) => {
       if (['CERRADO', 'EVALUADO', 'RESUELTO', 'RECHAZADO'].includes(r.status)) {
         countsSla['FINALIZADO']++
+        return
+      }
+      const slaHours = (r.zone_id && zoneMap.get(r.zone_id)) || r.sla_hours || 24
+      const elapsedHours = (Date.now() - new Date(r.created_at).getTime()) / (1000 * 60 * 60)
+      if (elapsedHours > slaHours) {
+        countsSla['VENCIDO']++
+      } else if (elapsedHours > slaHours * 0.75) {
+        countsSla['RIESGO']++
       } else {
         countsSla['A TIEMPO']++
       }
@@ -192,7 +227,6 @@ export const useReportsStore = defineStore('reports', () => {
     return Object.entries(countsSla).map(([label, value]) => ({ label, value }))
   })
 
-  // Recent events
   const recentEvents = computed(() => {
     return [...filteredReports.value]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -201,10 +235,12 @@ export const useReportsStore = defineStore('reports', () => {
 
   return {
     reports,
+    zones,
     filteredReports,
     zonesData,
     loading,
     error,
+    fetchZones,
     fetchReports,
     subscribeToReports,
     unsubscribe,

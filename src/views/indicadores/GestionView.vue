@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, defineAsyncComponent } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useReportsStore } from '@/stores/reports'
-import type { Report } from '@/types/report'
+import type { Crew, Report, Zone } from '@/types/report'
 import LeafletMap from '@/components/common/LeafletMap.vue'
 import L from 'leaflet'
 import { useCuadrillaAssignment } from '@/composables/useCuadrillaAssignment'
@@ -21,22 +21,37 @@ const filterStatus = ref('ACTIVOS')
 
 const mapInstance = ref<any>(null)
 const markerLayer = ref<any>(null)
-const zones = ref<any[]>([])
-const cuadrillas = ref<any[]>([])
+const zones = ref<Zone[]>([])
+const cuadrillas = ref<Crew[]>([])
 
 const { assignCrewAutomatically, isAssigning } = useCuadrillaAssignment()
 
 // Evidencia form control
 const showEvidenceForm = ref(false)
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
 async function loadZones() {
-  const { data } = await supabase.from('zones').select('*')
-  if (data) zones.value = data
+  try {
+    zones.value = await api.get<Zone[]>('/api/zones')
+  } catch (err) {
+    console.error('Error cargando zonas:', err)
+  }
 }
 
 async function loadCuadrillas() {
-  const { data } = await supabase.from('crews').select('*')
-  if (data) cuadrillas.value = data
+  try {
+    cuadrillas.value = await api.get<Crew[]>('/api/crews')
+  } catch (err) {
+    console.error('Error cargando cuadrillas:', err)
+  }
 }
 
 // Modal state
@@ -109,11 +124,14 @@ function renderMarkers() {
         fillOpacity: 0.85,
         weight: 2
       })
+      const safeCode = escapeHtml(report.tracking_code || `#${report.id}`)
+      const safeCat = escapeHtml(report.category.replace('_', ' '))
+      const safeStatus = escapeHtml(report.status)
       marker.bindPopup(`
         <div style="font-family: inherit;">
-          <div style="font-weight: 700; margin-bottom: 4px;">${report.tracking_code || `#${report.id}`}</div>
-          <div style="font-size: 12px; margin-bottom: 2px;">${report.category.replace('_', ' ')}</div>
-          <div style="font-size: 11px; color: #666;">${report.status}</div>
+          <div style="font-weight: 700; margin-bottom: 4px;">${safeCode}</div>
+          <div style="font-size: 12px; margin-bottom: 2px;">${safeCat}</div>
+          <div style="font-size: 11px; color: #666;">${safeStatus}</div>
         </div>
       `)
       marker.addTo(markerLayer.value)
@@ -160,7 +178,7 @@ async function triggerAutoAssignment() {
   const crewId = await assignCrewAutomatically(selectedReport.value.id)
   if (crewId) {
     alert('Asignación automática exitosa.')
-    await reportsStore.fetchReports()
+    await Promise.all([reportsStore.fetchReports(), loadCuadrillas()])
     closeModal()
   } else {
     alert('No se encontraron cuadrillas disponibles en la zona geográfica de este reporte.')
@@ -171,25 +189,15 @@ async function saveManagement() {
   if (!selectedReport.value) return
   isUpdating.value = true
   try {
-    const payload: any = { 
+    const payload: Record<string, unknown> = {
       status: manageForm.value.status,
       work_order: manageForm.value.work_order,
       assigned_operator_id: manageForm.value.assigned_operator_id || null
     }
 
-    // Set assigned_at if transitioning to ASIGNADO
-    if (manageForm.value.status === 'ASIGNADO' && selectedReport.value.status !== 'ASIGNADO') {
-      payload.assigned_at = new Date().toISOString()
-    }
+    await api.patch(`/api/reports/${selectedReport.value.id}`, payload)
 
-    const { error } = await supabase
-      .from('reports')
-      .update(payload)
-      .eq('id', selectedReport.value.id)
-      
-    if (error) throw error
-    
-    await reportsStore.fetchReports()
+    await Promise.all([reportsStore.fetchReports(), loadCuadrillas()])
     closeModal()
   } catch (e: any) {
     console.error('Error updating status:', e)
@@ -200,14 +208,18 @@ async function saveManagement() {
 }
 
 function onEvidenceSuccess() {
-  alert('Evidencia subida correctamente. El reporte ha sido enviado a verificación por el supervisor.')
+  alert('Evidencia subida correctamente. El reporte ha sido actualizado.')
   reportsStore.fetchReports()
+  loadCuadrillas()
   closeModal()
 }
 
 onMounted(() => {
   loadZones()
   loadCuadrillas()
+  if (reportsStore.reports.length === 0) {
+    reportsStore.fetchReports()
+  }
   reportsStore.subscribeToReports()
 })
 
@@ -387,7 +399,7 @@ function getSlaStatus(report: Report) {
                 
                 <option v-if="auth.isSupervisor" value="CERRADO">CERRADO (Archivado)</option>
                 <option v-if="auth.isAdmin" value="RECHAZADO">RECHAZADO (Inválido/Duplicado)</option>
-                <option value="CALIFICADO" disabled>CALIFICADO (Solo ciudadano)</option>
+                <option value="EVALUADO" disabled>EVALUADO (Solo ciudadano)</option>
               </select>
             </div>
 

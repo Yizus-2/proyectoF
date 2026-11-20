@@ -1,19 +1,23 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api, getAssetUrl } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useReportsStore } from '@/stores/reports'
+import type { Evidence, Report } from '@/types/report'
+
+interface ReportWithEvidences extends Report {
+  evidences: Evidence[]
+}
 
 const auth = useAuthStore()
 const reportsStore = useReportsStore()
 
 const loading = ref(false)
 const errorMessage = ref('')
-const pendingReports = ref<any[]>([])
+const pendingReports = ref<ReportWithEvidences[]>([])
 const verificationComments = ref<Record<number, string>>({})
 const isSubmitting = ref<Record<number, boolean>>({})
 
-// Watch reportsStore.reports to update pendingReports reactively with their evidence
 watch(
   () => reportsStore.reports,
   async (newReports) => {
@@ -21,27 +25,29 @@ watch(
       pendingReports.value = []
       return
     }
-    const supervisorReports = newReports.filter(r => r.status === 'RESUELTO')
-    
+    const supervisorReports = newReports.filter((r) => r.status === 'RESUELTO')
+
     loading.value = true
     try {
       const reportsWithEvidence = await Promise.all(
-        supervisorReports.map(async (report: any) => {
-          const existing = pendingReports.value.find(p => p.id === report.id)
-          if (existing && existing.status === report.status && existing.evidences && existing.evidences.length > 0) {
+        supervisorReports.map(async (report) => {
+          const existing = pendingReports.value.find((p) => p.id === report.id)
+          if (existing && existing.status === report.status && existing.evidences.length > 0) {
             return existing
           }
 
-          const { data: evidenceData, error: evErr } = await supabase
-            .from('evidences')
-            .select('*')
-            .eq('report_id', report.id)
-            .order('created_at', { ascending: true })
-
-          if (evErr) console.warn('Error reading evidence for report', report.id, evErr)
-          return {
-            ...report,
-            evidences: evidenceData || []
+          try {
+            const evidenceData = await api.get<Evidence[]>(`/api/reports/${report.id}/evidences`)
+            return {
+              ...report,
+              evidences: evidenceData.map((ev) => ({
+                ...ev,
+                evidence_url: getAssetUrl(ev.evidence_url) || ev.evidence_url
+              }))
+            }
+          } catch (evErr) {
+            console.warn('Error reading evidence for report', report.id, evErr)
+            return { ...report, evidences: [] }
           }
         })
       )
@@ -65,39 +71,13 @@ async function verify(reportId: number, decision: 'APROBADO' | 'RECHAZADO' | 'RE
 
   isSubmitting.value[reportId] = true
   try {
-    // 1. Insert Verification Record
-    const { error: dbError } = await supabase
-      .from('verifications')
-      .insert({
-        report_id: reportId,
-        supervisor_id: auth.user?.id,
-        decision,
-        comments: comment
-      })
+    await api.post(`/api/reports/${reportId}/verifications`, {
+      decision,
+      comments: comment
+    })
 
-    if (dbError) throw dbError
-
-    // 2. Map decision to report status
-    let nextStatus = 'CERRADO'
-    if (decision === 'RECHAZADO') {
-      nextStatus = 'RECHAZADO'
-    } else if (decision === 'REGLAMENTO_PENDIENTE') {
-      nextStatus = 'EN_PROGRESO'
-    }
-
-    // 3. Update Report Status
-    const { error: reportError } = await supabase
-      .from('reports')
-      .update({
-        status: nextStatus,
-        resolved_at: decision === 'APROBADO' ? new Date().toISOString() : null
-      })
-      .eq('id', reportId)
-
-    if (reportError) throw reportError
-
-    // Clear local inputs
     delete verificationComments.value[reportId]
+    await reportsStore.fetchReports()
   } catch (err: any) {
     console.error('Error submitting verification:', err)
     alert('Error: ' + (err.message || 'No se pudo guardar la decisión.'))

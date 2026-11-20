@@ -4,35 +4,35 @@ import { useAuthStore } from '@/stores/auth'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { 
-      path: '/', 
+    {
+      path: '/',
       name: 'home',
-      component: () => import('@/views/HomeView.vue') 
+      component: () => import('@/views/HomeView.vue')
     },
-    { 
-      path: '/login', 
-      name: 'login', 
-      component: () => import('@/views/LoginView.vue') 
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/LoginView.vue')
     },
-    { 
-      path: '/reportar', 
-      name: 'report', 
-      component: () => import('@/views/ReportView.vue') 
+    {
+      path: '/reportar',
+      name: 'report',
+      component: () => import('@/views/ReportView.vue')
     },
-    { 
-      path: '/rastrear', 
-      name: 'track', 
-      component: () => import('@/views/TrackView.vue') 
+    {
+      path: '/rastrear',
+      name: 'track',
+      component: () => import('@/views/TrackView.vue')
     },
-    { 
-      path: '/indicadores', 
-      name: 'dashboard', 
+    {
+      path: '/indicadores',
+      name: 'dashboard',
       component: () => import('@/views/indicadores/Dashboard.vue'),
-      meta: { requiresAuth: true, role: 'admin' }
+      meta: { requiresAuth: true, role: 'supervisor' }
     },
-    { 
-      path: '/gestion', 
-      name: 'gestion', 
+    {
+      path: '/gestion',
+      name: 'gestion',
       component: () => import('@/views/indicadores/GestionView.vue'),
       meta: { requiresAuth: true, role: 'operator' }
     },
@@ -52,28 +52,30 @@ const router = createRouter({
 
 router.beforeEach(async (to, _from, next) => {
   const auth = useAuthStore()
-  
+
   if (auth.loading) {
     await auth.initialize()
   }
 
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
   const requiredRole = to.meta.role as string | undefined
   const isLoginPage = to.name === 'login'
 
   if (requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (requiresAuth && requiredRole === 'admin' && !auth.isAdmin) {
-    // Si la ruta pide admin (ej. indicadores) pero es operator, mandarlo a gestion
+    if (auth.isSupervisor) next({ name: 'dashboard' })
+    else if (auth.isOperator) next({ name: 'gestion' })
+    else next({ name: 'home' })
+  } else if (requiresAuth && requiredRole === 'supervisor' && !auth.isSupervisor) {
     if (auth.isOperator) next({ name: 'gestion' })
     else next({ name: 'home' })
-  } else if (requiresAuth && requiredRole === 'operator' && !auth.isOperator && !auth.isAdmin) {
+  } else if (requiresAuth && requiredRole === 'operator' && !auth.isOperator) {
     next({ name: 'report' })
   } else if (to.name === 'track' && auth.isAdmin) {
-    // Admin no debe consultar rastreo ciudadano
     next({ name: 'dashboard' })
   } else if (isLoginPage && auth.isAuthenticated) {
-    if (auth.isAdmin) {
+    if (auth.isSupervisor) {
       next({ name: 'dashboard' })
     } else if (auth.isOperator) {
       next({ name: 'gestion' })

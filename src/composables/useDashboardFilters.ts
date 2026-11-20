@@ -1,34 +1,40 @@
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useIndicadoresStore } from '@/stores/indicadores'
-import type { PeriodoFiltro, TipoReporte, ZonaFiltro, NivelRiesgo } from '@/types/indicadores'
+import type { CategoriaReporte, NivelRiesgo, PeriodoFiltro, ZonaFiltro } from '@/types/indicadores'
 
 export function useDashboardFilters() {
   const router = useRouter()
   const route = useRoute()
   const store = useIndicadoresStore()
 
-  // Sincronizar store -> URL
-  watch(() => store.filtros, (nuevosFiltros) => {
-    router.replace({
-      query: {
-        ...route.query,
-        periodo: nuevosFiltros.periodo,
-        tipo: nuevosFiltros.tipoReporte,
-        zona: nuevosFiltros.zona,
-        riesgo: nuevosFiltros.nivelRiesgo
-      }
-    }).catch(() => {})
-  }, { deep: true })
+  watch(
+    () => store.filtros,
+    (nuevosFiltros) => {
+      router
+        .replace({
+          query: {
+            ...route.query,
+            periodo: nuevosFiltros.periodo,
+            categoria: nuevosFiltros.categoria,
+            zona: String(nuevosFiltros.zona),
+            riesgo: nuevosFiltros.nivelRiesgo
+          }
+        })
+        .catch(() => {})
+    },
+    { deep: true }
+  )
 
-  // Inicializar desde URL
   const initFiltersFromUrl = () => {
     const q = route.query
-    if (q.periodo || q.tipo || q.zona || q.riesgo) {
+    if (q.periodo || q.categoria || q.zona || q.riesgo) {
+      const zonaVal: ZonaFiltro =
+        q.zona && q.zona !== 'todas' && !Number.isNaN(Number(q.zona)) ? Number(q.zona) : 'todas'
       store.actualizarFiltros({
-        periodo: (q.periodo as PeriodoFiltro) || '7dias',
-        tipoReporte: (q.tipo as TipoReporte) || 'todos',
-        zona: (q.zona as ZonaFiltro) || 'todas',
+        periodo: (q.periodo as PeriodoFiltro) || '30dias',
+        categoria: (q.categoria as CategoriaReporte) || 'todos',
+        zona: zonaVal,
         nivelRiesgo: (q.riesgo as NivelRiesgo) || 'todos'
       })
     }

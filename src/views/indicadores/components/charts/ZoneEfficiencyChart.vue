@@ -21,13 +21,13 @@ const datos = computed(() => {
   const counts: Record<string, number> = {}
   
   reports.forEach(r => {
-    if (!['completado', 'rechazado', 'cerrado', 'resuelto'].includes(r.status.toLowerCase())) {
-      let zonaStr = r.zona || r.zone_id?.toString() || 'Sin Asignar'
-      
-      // Buscar en reportsStore.zonesData
-      if (r.zone_id) {
-        const found = reportsStore.zonesData.find(z => z.zone_id === r.zone_id || z.id === r.zone_id)
-        if (found) zonaStr = found.zone_name || found.name || zonaStr
+    if (!['completado', 'rechazado', 'cerrado', 'resuelto', 'evaluado'].includes(r.status.toLowerCase())) {
+      let zonaStr = r.zone_name || (r.zone_id ? `Zona #${r.zone_id}` : 'Sin Asignar')
+
+      if (r.zone_id && !r.zone_name) {
+        const foundZone = reportsStore.zones.find((z) => z.id === r.zone_id)
+        const foundAnalytics = reportsStore.zonesData.find((z) => z.zone_id === r.zone_id)
+        zonaStr = foundZone?.name || foundAnalytics?.zone_name || zonaStr
       }
       
       if (!counts[zonaStr]) counts[zonaStr] = 0

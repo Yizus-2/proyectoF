@@ -1,46 +1,29 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { supabase } from '@/lib/supabase'
-import { useAuthStore } from '@/stores/auth'
+import { api } from '@/lib/api'
 import LeafletMap from '@/components/common/LeafletMap.vue'
 import L from 'leaflet'
 import type { Zone } from '@/types/report'
 
-const auth = useAuthStore()
 const zones = ref<Zone[]>([])
 
 async function loadZones() {
   try {
-    const { data, error } = await supabase.from('zones').select('*').order('name')
-    if (error) throw error
+    const data = await api.get<Zone[]>('/api/zones')
     if (data && data.length > 0) {
       zones.value = data
       return
     }
   } catch (err) {
-    console.warn('Fallo al cargar zonas desde la BD (RLS o Red). Usando hardcodeo de respaldo:', err)
+    console.warn('No se pudieron cargar zonas desde la API:', err)
   }
-
-  // HARDCODEO DE RESPALDO (Mismos IDs que el seeder rebuild_db_v2.sql)
-  zones.value = [
-    { id: 4, name: 'Bastidas', code: 'ZONA-04', sla_hours: 24 },
-    { id: 7, name: 'Bonda', code: 'ZONA-07', sla_hours: 48 },
-    { id: 1, name: 'Centro Histórico', code: 'ZONA-01', sla_hours: 12 },
-    { id: 5, name: 'Gaira', code: 'ZONA-05', sla_hours: 24 },
-    { id: 3, name: 'Mamatoco', code: 'ZONA-03', sla_hours: 24 },
-    { id: 10, name: 'Otros', code: 'ZONA-99', sla_hours: 48 },
-    { id: 9, name: 'Pescaíto', code: 'ZONA-09', sla_hours: 24 },
-    { id: 2, name: 'Rodadero', code: 'ZONA-02', sla_hours: 24 },
-    { id: 6, name: 'Taganga', code: 'ZONA-06', sla_hours: 48 },
-    { id: 8, name: 'Zona Industrial', code: 'ZONA-08', sla_hours: 24 }
-  ]
 }
 loadZones()
 
 const step = ref(1)
 const totalSteps = 3
 const loading = ref(false)
-const successData = ref<{ tracking_code: string } | null>(null)
+const successData = ref<{ tracking_code: string; work_order?: string | null } | null>(null)
 const errorMessage = ref('')
 
 const categories = [
@@ -277,45 +260,33 @@ async function submitReport() {
   loading.value = true
   errorMessage.value = ''
   try {
-    let photoPath = null
+    const fd = new FormData()
+    fd.append('reporter_name', form.value.reporter_name || 'Ciudadano Anónimo')
+    if (form.value.reporter_phone) fd.append('reporter_phone', form.value.reporter_phone)
+    if (form.value.reporter_email) fd.append('reporter_email', form.value.reporter_email)
+    fd.append('category', form.value.category)
+    fd.append('priority', form.value.priority)
+    if (form.value.description) fd.append('description', form.value.description)
+    fd.append('address', form.value.address || 'Ubicación seleccionada en mapa')
+    if (form.value.sector) fd.append('sector', form.value.sector)
+    fd.append('zone_id', String(form.value.zone_id))
+    if (form.value.lat !== null) fd.append('lat', String(form.value.lat))
+    if (form.value.lng !== null) fd.append('lng', String(form.value.lng))
+    fd.append('source', 'WEB')
+
     if (form.value.photoFile) {
-      // Comprimimos la imagen antes de subirla
       const compressedFile = await compressImage(form.value.photoFile)
-      
-      const ext = compressedFile.name.split('.').pop() || 'jpg'
-      const name = `${Date.now()}-${Math.random().toString(36).substring(2)}.${ext}`
-      const filePath = `${name}`
-      const { error: upErr } = await supabase.storage.from('reports').upload(filePath, compressedFile)
-      if (upErr) console.warn('Photo upload error:', upErr.message)
-      else photoPath = filePath
-    }
-    const payload = {
-      reporter_id: auth.user?.id || null,
-      reporter_name: form.value.reporter_name || 'Ciudadano Anónimo',
-      reporter_phone: form.value.reporter_phone || null,
-      reporter_email: form.value.reporter_email || null,
-      category: form.value.category,
-      priority: form.value.priority,
-      description: form.value.description || null,
-      address: form.value.address || 'Ubicación seleccionada en mapa',
-      sector: form.value.sector || null,
-      zone_id: form.value.zone_id,
-      lat: form.value.lat,
-      lng: form.value.lng,
-      photo_path: photoPath,
-      source: 'WEB' as const
-    }
-    const { data, error } = await supabase.from('reports').insert(payload).select('id, tracking_code').single()
-    if (error) throw error
-    
-    // Trigger automatic crew assignment
-    try {
-      await supabase.rpc('assign_crew_automatically', { p_report_id: data.id })
-    } catch (assignErr) {
-      console.warn('Automatic crew assignment failed on creation:', assignErr)
+      fd.append('photo', compressedFile)
     }
 
-    successData.value = { tracking_code: data?.tracking_code || '—' }
+    const data = await api.post<{ id: number; tracking_code: string; work_order: string | null }>(
+      '/api/reports',
+      fd
+    )
+    successData.value = {
+      tracking_code: data?.tracking_code || '—',
+      work_order: data?.work_order || null
+    }
   } catch (error: any) {
     errorMessage.value = error.message || 'Error al enviar. Intenta de nuevo.'
     console.error('Submit error:', error)

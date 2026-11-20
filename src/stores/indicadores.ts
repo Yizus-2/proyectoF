@@ -3,11 +3,21 @@ import { ref, computed } from 'vue'
 import { useReportsStore } from './reports'
 import type { FiltrosDashboard, KpiConfig } from '@/types/indicadores'
 
+const CATEGORY_LABELS: Record<string, string> = {
+  todos: 'Todas las categorías',
+  fuga_agua: 'Fugas de agua',
+  fuga_alcantarillado: 'Alcantarillado',
+  tuberia_rota: 'Tubería rota',
+  dano_pavimento: 'Daño vial / pavimento',
+  dano_infraestructura: 'Infraestructura',
+  otro: 'Otros reportes'
+}
+
 export const useIndicadoresStore = defineStore('indicadores', () => {
   const reportsStore = useReportsStore()
 
   const filtros = ref<FiltrosDashboard>({
-    periodo: '7dias',
+    periodo: '30dias',
     categoria: 'todos',
     zona: 'todas',
     nivelRiesgo: 'todos'
@@ -25,7 +35,7 @@ export const useIndicadoresStore = defineStore('indicadores', () => {
       afectadoPorCategoria: true,
       accionSugerida: {
         bueno: 'Carga de trabajo bajo control',
-        malo: 'Asignar más cuadrillas o hacer horas extra'
+        malo: 'Asignar más cuadrillas o redistribuir carga'
       }
     },
     {
@@ -86,50 +96,44 @@ export const useIndicadoresStore = defineStore('indicadores', () => {
     }
   ])
 
-  const contextoActual = computed(() => {
-    const cat = filtros.value.categoria
-    return cat === 'todos' ? 'Todas las categorías' :
-           cat === 'fuga' ? 'Fugas de agua' :
-           cat === 'presion' ? 'Métricas de presión' :
-           cat === 'hidrante' ? 'Inventario de hidrantes' :
-           'Infraestructura general'
-  })
+  const contextoActual = computed(() => CATEGORY_LABELS[filtros.value.categoria] || 'Todas las categorías')
 
-  // Computamos los reportes filtrados base usando ambos stores
   const reportesFiltrados = computed(() => {
     let list = reportsStore.reports
 
-    // Filtro Periodo
+    // Filtro Período
     const now = new Date()
-    let startDate = new Date(0) // ALL
+    let startDate: Date | null = null
     if (filtros.value.periodo === 'hoy') {
       startDate = new Date()
-      startDate.setHours(0,0,0,0)
+      startDate.setHours(0, 0, 0, 0)
     } else if (filtros.value.periodo === '7dias') {
       startDate = new Date()
       startDate.setDate(now.getDate() - 7)
-      startDate.setHours(0,0,0,0)
+      startDate.setHours(0, 0, 0, 0)
     } else if (filtros.value.periodo === '30dias') {
       startDate = new Date()
       startDate.setDate(now.getDate() - 30)
-      startDate.setHours(0,0,0,0)
+      startDate.setHours(0, 0, 0, 0)
     }
-    
-    list = list.filter(r => new Date(r.created_at) >= startDate)
 
-    // Filtro Categoria
+    if (startDate) {
+      list = list.filter((r) => new Date(r.created_at) >= startDate!)
+    }
+
+    // Filtro Categoría (valores reales de BD)
     if (filtros.value.categoria !== 'todos') {
-      list = list.filter(r => r.category === filtros.value.categoria || r.tipo === filtros.value.categoria)
+      list = list.filter((r) => r.category === filtros.value.categoria)
     }
 
-    // Filtro Zona
-    // Nota: r.zone_id es numérico, si zona es 'todas' pasa.
-    // Falta mapeo exacto de nombre a zone_id, lo omitiremos si 'todas'
-    // En el futuro: && r.zone_name.toLowerCase().includes(filtros.value.zona)
+    // Filtro Zona (ID real de zona)
+    if (filtros.value.zona !== 'todas') {
+      list = list.filter((r) => Number(r.zone_id) === Number(filtros.value.zona))
+    }
 
-    // Filtro Nivel Riesgo
+    // Filtro Nivel de Riesgo
     if (filtros.value.nivelRiesgo !== 'todos') {
-      list = list.filter(r => r.priority?.toLowerCase() === filtros.value.nivelRiesgo)
+      list = list.filter((r) => r.priority === filtros.value.nivelRiesgo)
     }
 
     return list
