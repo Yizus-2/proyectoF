@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue'
+import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useReportsStore } from '@/stores/reports'
+import { useToastStore } from '@/stores/toast'
+import type { ArchivedDocument } from '@/types/report'
 import DashboardFilters from './components/DashboardFilters.vue'
 import ReportsByUrgencyChart from './components/charts/ReportsByUrgencyChart.vue'
 import SlaComplianceChart from './components/charts/SlaComplianceChart.vue'
@@ -15,6 +18,7 @@ const activeTab = ref<'analytics' | 'operations' | 'verification'>('analytics')
 const auth = useAuthStore()
 const reportsStore = useReportsStore()
 const indicadoresStore = useIndicadoresStore()
+const toastStore = useToastStore()
 
 const GestionView = defineAsyncComponent(() => import('./GestionView.vue'))
 const VerificacionPanel = defineAsyncComponent(() => import('../supervisor/VerificacionPanel.vue'))
@@ -23,8 +27,92 @@ const loading = computed(() => reportsStore.loading)
 const errorMsg = computed(() => reportsStore.error || '')
 const kpis = computed(() => reportsStore.kpis)
 
+const exportingPdf = ref(false)
+const exportingCsv = ref(false)
+const archivedDocs = ref<ArchivedDocument[]>([])
+
+async function loadDocuments() {
+  try {
+    archivedDocs.value = await api.get<ArchivedDocument[]>('/api/documents')
+  } catch (err) {
+    console.warn('No se pudieron cargar documentos archivados:', err)
+  }
+}
+
 async function loadDashboardData() {
-  await reportsStore.fetchReports()
+  await Promise.all([reportsStore.fetchReports(), loadDocuments()])
+}
+
+async function exportExecutivePdf() {
+  exportingPdf.value = true
+  try {
+    const meta = await api.download('/api/analytics/export/pdf?download=1', {
+      method: 'POST',
+      body: indicadoresStore.filtros,
+      fallbackFilename: `Informe-Ejecutivo-ESSMAR.pdf`
+    })
+    toastStore.addToast({
+      title: 'Informe PDF archivado en S3',
+      message: meta.s3Key ? `Guardado en MinIO S3 (${meta.s3Key})` : `Descargado ${meta.fileName}`,
+      type: 'success'
+    })
+    await loadDocuments()
+  } catch (e: any) {
+    toastStore.addToast({
+      title: 'Error exportando PDF',
+      message: e.message || 'No se pudo generar el informe ejecutivo.',
+      type: 'error'
+    })
+  } finally {
+    exportingPdf.value = false
+  }
+}
+
+async function exportCsv() {
+  exportingCsv.value = true
+  try {
+    const params = new URLSearchParams({
+      periodo: indicadoresStore.filtros.periodo,
+      categoria: indicadoresStore.filtros.categoria,
+      zona: String(indicadoresStore.filtros.zona),
+      nivelRiesgo: indicadoresStore.filtros.nivelRiesgo
+    })
+    const meta = await api.download(`/api/analytics/export/csv?${params.toString()}`, {
+      fallbackFilename: 'Reportes-ESSMAR.csv'
+    })
+    toastStore.addToast({
+      title: 'Exportación CSV lista',
+      message: `Se descargó ${meta.fileName}`,
+      type: 'success'
+    })
+  } catch (e: any) {
+    toastStore.addToast({
+      title: 'Error exportando CSV',
+      message: e.message || 'No se pudo exportar CSV.',
+      type: 'error'
+    })
+  } finally {
+    exportingCsv.value = false
+  }
+}
+
+async function downloadArchivedDoc(doc: ArchivedDocument) {
+  try {
+    await api.download(`/api/documents/${doc.id}/download`, {
+      fallbackFilename: doc.file_name
+    })
+  } catch (e: any) {
+    toastStore.addToast({
+      title: 'Error descargando PDF',
+      message: e.message || 'No se pudo descargar el documento desde S3.',
+      type: 'error'
+    })
+  }
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  return `${(bytes / 1024).toFixed(1)} KB`
 }
 
 function handleKpiClick(filter: 'ALL' | 'PENDING' | 'RESOLVED' | 'CRITICAL') {
@@ -49,6 +137,15 @@ onUnmounted(() => {
       <div class="header-content">
         <h1 class="header-title">Centro de Control e Indicadores</h1>
         <p class="header-subtitle">Monitoreo operativo y analítica en tiempo real – ESSMAR SIGVI</p>
+      </div>
+
+      <div class="export-actions" v-if="auth.isSupervisor">
+        <button class="btn-primary" @click="exportExecutivePdf" :disabled="exportingPdf">
+          {{ exportingPdf ? '⏳ Generando PDF...' : '📄 Exportar Informe PDF (S3)' }}
+        </button>
+        <button class="btn-ghost" @click="exportCsv" :disabled="exportingCsv">
+          {{ exportingCsv ? '⏳ Exportando...' : '📊 Exportar CSV' }}
+        </button>
       </div>
       
       <!-- Resumen de Alto Nivel (KPIs) -->
@@ -150,6 +247,48 @@ onUnmounted(() => {
             <ChannelsChart />
           </div>
         </section>
+
+        <!-- Repositorio de Documentos PDF archivados en MinIO S3 -->
+        <section class="glass-card docs-archive-card" v-if="archivedDocs.length > 0">
+          <div class="card-header">
+            <div class="header-titles">
+              <h3>🗄️ Repositorio de Documentos PDF (MinIO S3)</h3>
+              <p class="chart-subtitle">Comprobantes legales PQR e informes ejecutivos archivados con integridad SHA-256</p>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Archivo</th>
+                  <th>Objeto S3</th>
+                  <th>Tamaño</th>
+                  <th>SHA-256</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="doc in archivedDocs.slice(0, 10)" :key="doc.id">
+                  <td>
+                    <span class="badge-pill" :class="doc.doc_type === 'REPORTE_EJECUTIVO' ? 'bg-warn' : 'bg-success'">
+                      {{ doc.doc_type === 'REPORTE_EJECUTIVO' ? 'Ejecutivo' : 'PQR Legal' }}
+                    </span>
+                  </td>
+                  <td class="td-primary">{{ doc.file_name }}</td>
+                  <td style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted);">{{ doc.s3_key }}</td>
+                  <td>{{ formatBytes(doc.size_bytes) }}</td>
+                  <td style="font-family: var(--font-mono); font-size: 0.78rem;">{{ doc.sha256_hash.slice(0, 12) }}…</td>
+                  <td>
+                    <button class="btn-ghost" style="padding: 6px 12px; font-size: 0.8rem;" @click="downloadArchivedDoc(doc)">
+                      ⬇️ Descargar
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -199,6 +338,12 @@ onUnmounted(() => {
   color: var(--muted);
   font-size: 1.05rem;
   margin: 4px 0 0 0;
+}
+
+.export-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* Tabs Navigation */

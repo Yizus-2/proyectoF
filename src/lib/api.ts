@@ -71,6 +71,47 @@ export const api = {
       body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined
     }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  download: async (
+    path: string,
+    { method = 'GET', body, fallbackFilename = 'documento.pdf' }: { method?: 'GET' | 'POST'; body?: unknown; fallbackFilename?: string } = {}
+  ) => {
+    const headers = new Headers()
+    const token = getAuthToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    if (body !== undefined) headers.set('Content-Type', 'application/json')
+
+    const res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined
+    })
+
+    if (!res.ok) {
+      const errPayload = await res.json().catch(() => null)
+      throw new Error(errPayload?.error || `Error HTTP ${res.status}`)
+    }
+
+    const blob = await res.blob()
+    const disposition = res.headers.get('Content-Disposition') || ''
+    const match = disposition.match(/filename="?([^"]+)"?/i)
+    const fileName = match?.[1] || fallbackFilename
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+
+    return {
+      fileName,
+      sha256: res.headers.get('X-Document-SHA256'),
+      s3Key: res.headers.get('X-S3-Key'),
+      documentId: res.headers.get('X-Document-Id')
+    }
+  },
   eventsUrl: () => {
     const token = getAuthToken()
     const query = token ? `?token=${encodeURIComponent(token)}` : ''

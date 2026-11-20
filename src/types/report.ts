@@ -158,3 +158,20 @@ export interface Rating {
   comment: string | null
   created_at: string
 }
+
+export interface ArchivedDocument {
+  id: number
+  report_id: number | null
+  tracking_code?: string | null
+  doc_type: 'COMPROBANTE_PQR' | 'REPORTE_EJECUTIVO'
+  s3_bucket: string
+  s3_key: string
+  file_name: string
+  mime_type: string
+  size_bytes: number
+  sha256_hash: string
+  generated_by: string | null
+  generator_name?: string | null
+  generator_email?: string | null
+  created_at: string
+}

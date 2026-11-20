@@ -2,9 +2,12 @@
 import { ref, computed } from 'vue'
 import { api, getAssetUrl } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
+import { useToastStore } from '@/stores/toast'
 import type { PublicTrackedReport, ReportHistory } from '@/types/report'
 
 const auth = useAuthStore()
+const toastStore = useToastStore()
+const downloadingPdf = ref(false)
 
 const trackingCode = ref('')
 const loading = ref(false)
@@ -147,6 +150,32 @@ function getStatusColor(status: string) {
   return 'var(--primary)'
 }
 
+async function downloadLegalPdf() {
+  if (!reportData.value?.tracking_code) return
+  downloadingPdf.value = true
+  try {
+    const code = encodeURIComponent(reportData.value.tracking_code)
+    const meta = await api.download(`/api/reports/track/${code}/pdf`, {
+      fallbackFilename: `Comprobante-${reportData.value.tracking_code}.pdf`
+    })
+    toastStore.addToast({
+      title: 'Comprobante PDF archivado en S3',
+      message: meta.sha256
+        ? `Descargado ${meta.fileName} (SHA-256: ${meta.sha256.slice(0, 12)}…)`
+        : `Descargado ${meta.fileName}`,
+      type: 'success'
+    })
+  } catch (e: any) {
+    toastStore.addToast({
+      title: 'Error generando PDF',
+      message: e.message || 'No se pudo generar el comprobante legal.',
+      type: 'error'
+    })
+  } finally {
+    downloadingPdf.value = false
+  }
+}
+
 function printLegalDocument() {
   window.print()
 }
@@ -229,10 +258,13 @@ function printLegalDocument() {
             </RouterLink>
           </div>
 
-          <!-- Botón de impresión legal -->
-          <div class="print-actions no-print">
-            <button @click="printLegalDocument" class="btn-outline-primary">
-              📄 Descargar Comprobante Legal (PDF)
+          <!-- Botones de Comprobante PDF en S3 e impresión -->
+          <div class="print-actions no-print" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button @click="downloadLegalPdf" class="btn-outline-primary" style="flex: 1;" :disabled="downloadingPdf">
+              {{ downloadingPdf ? '⏳ Generando PDF en S3...' : '📄 Descargar Comprobante Legal (PDF)' }}
+            </button>
+            <button @click="printLegalDocument" class="btn-ghost" title="Imprimir página">
+              🖨️ Imprimir
             </button>
           </div>
 
