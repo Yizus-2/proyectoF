@@ -23,6 +23,103 @@ fs.mkdirSync(path.join(UPLOADS_DIR, 'reports'), { recursive: true })
 fs.mkdirSync(path.join(UPLOADS_DIR, 'evidences'), { recursive: true })
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function validateImageMagicBytes(filePath) {
+  const fd = fs.openSync(filePath, 'r')
+  try {
+    const buf = Buffer.alloc(12)
+    const bytesRead = fs.readSync(fd, buf, 0, 12, 0)
+    if (bytesRead < 8) return false
+    // JPEG: FF D8 FF
+    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (
+      buf[0] === 0x89 &&
+      buf[1] === 0x50 &&
+      buf[2] === 0x4e &&
+      buf[3] === 0x47 &&
+      buf[4] === 0x0d &&
+      buf[5] === 0x0a &&
+      buf[6] === 0x1a &&
+      buf[7] === 0x0a
+    ) {
+      return true
+    }
+    // WEBP: RIFF....WEBP
+    if (
+      bytesRead >= 12 &&
+      buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      buf.subarray(8, 12).toString('ascii') === 'WEBP'
+    ) {
+      return true
+    }
+    return false
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
+function assertValidUploadedImage(file) {
+  if (!file) return true
+  if (validateImageMagicBytes(file.path)) return true
+  try {
+    fs.unlinkSync(file.path)
+  } catch {
+    // Ignore cleanup errors
+  }
+  return false
+}
+
+function createRateLimiter({ windowMs, max, keyFn }) {
+  const hits = new Map()
+  setInterval(() => {
+    const now = Date.now()
+    for (const [k, entry] of hits.entries()) {
+      if (now > entry.resetAt) hits.delete(k)
+    }
+  }, Math.min(windowMs, 60000)).unref()
+
+  return (req, res, next) => {
+    const key = keyFn(req)
+    const now = Date.now()
+    let entry = hits.get(key)
+    if (!entry || now > entry.resetAt) {
+      entry = { count: 0, resetAt: now + windowMs }
+      hits.set(key, entry)
+    }
+    entry.count++
+    if (entry.count > max) {
+      const retrySec = Math.max(1, Math.ceil((entry.resetAt - now) / 1000))
+      res.setHeader('Retry-After', String(retrySec))
+      return res.status(429).json({
+        error: 'Demasiados intentos. Por favor espera unos minutos antes de intentar de nuevo.'
+      })
+    }
+    next()
+  }
+}
+
+const loginRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  keyFn: (req) => `login:${req.ip}:${String(req.body?.email || '').toLowerCase()}`
+})
+
+const reportRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyFn: (req) => `report:${req.ip}`
+})
+
+function parseCoordinate(raw, min, max, label) {
+  if (raw === undefined || raw === null || raw === '') return null
+  const num = Number(raw)
+  if (!Number.isFinite(num) || num < min || num > max) {
+    throw Object.assign(new Error(`Coordenada ${label} fuera de rango (${min} a ${max}).`), { statusCode: 400 })
+  }
+  return num
+}
 const ALLOWED_CATEGORIES = new Set([
   'fuga_agua',
   'fuga_alcantarillado',
@@ -80,12 +177,15 @@ const uploadReportPhoto = createUploader('reports')
 const uploadEvidencePhoto = createUploader('evidences')
 
 const app = express()
+app.disable('x-powered-by')
 
-// Cabeceras básicas de seguridad
+// Cabeceras de seguridad
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(self)')
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; frame-ancestors 'none'")
   next()
 })
 
@@ -113,7 +213,7 @@ app.get('/api/health', async (_req, res) => {
 // ─────────────────────────────────────────────
 // AUTENTICACIÓN (JWT + SCRYPT)
 // ─────────────────────────────────────────────
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginRateLimiter, async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase()
     const password = String(req.body?.password || '')
@@ -194,16 +294,20 @@ app.get('/api/zones', async (_req, res) => {
 // ─────────────────────────────────────────────
 
 // Crear reporte (ciudadano anónimo o usuario autenticado)
-app.post('/api/reports', optionalAuth, uploadReportPhoto.single('photo'), async (req, res) => {
+app.post('/api/reports', reportRateLimiter, optionalAuth, uploadReportPhoto.single('photo'), async (req, res) => {
   try {
+    if (req.file && !assertValidUploadedImage(req.file)) {
+      return res.status(400).json({ error: 'El archivo subido no es una imagen JPG, PNG o WEBP válida.' })
+    }
+
     const body = req.body || {}
     const category = ALLOWED_CATEGORIES.has(body.category) ? body.category : 'otro'
     const priority = ALLOWED_PRIORITIES.has(body.priority) ? body.priority : 'BAJA'
     const source = ALLOWED_SOURCES.has(body.source) ? body.source : 'WEB'
     const address = String(body.address || '').trim() || 'Ubicación seleccionada en mapa'
     const zoneId = body.zone_id ? Number(body.zone_id) : null
-    const lat = body.lat !== undefined && body.lat !== '' && body.lat !== null ? Number(body.lat) : null
-    const lng = body.lng !== undefined && body.lng !== '' && body.lng !== null ? Number(body.lng) : null
+    const lat = parseCoordinate(body.lat, -90, 90, 'lat')
+    const lng = parseCoordinate(body.lng, -180, 180, 'lng')
 
     if (!zoneId || Number.isNaN(zoneId)) {
       return res.status(400).json({ error: 'Debe seleccionar una zona válida.' })
@@ -263,8 +367,9 @@ app.post('/api/reports', optionalAuth, uploadReportPhoto.single('photo'), async 
       work_order: created.work_order
     })
   } catch (err) {
+    const code = err.statusCode || 500
     console.error('POST /api/reports error:', err)
-    res.status(500).json({ error: err.message || 'Error al registrar reporte.' })
+    res.status(code).json({ error: err.message || 'Error al registrar reporte.' })
   }
 })
 
@@ -348,7 +453,13 @@ app.patch(
         return res.status(403).json({ error: 'Solo supervisores o administradores pueden cerrar un reporte.' })
       }
 
+      if (req.file && !assertValidUploadedImage(req.file)) {
+        return res.status(400).json({ error: 'El archivo de evidencia no es una imagen JPG, PNG o WEBP válida.' })
+      }
       const evidencePath = req.file ? `/uploads/evidences/${req.file.filename}` : undefined
+      if (body.assigned_operator_id && !UUID_REGEX.test(String(body.assigned_operator_id))) {
+        return res.status(400).json({ error: 'ID de operador asignado inválido.' })
+      }
 
       const updated = await withTransaction(
         async (client) => {
@@ -471,14 +582,17 @@ app.post(
       if (!req.file) {
         return res.status(400).json({ error: 'La fotografía de evidencia es obligatoria.' })
       }
+      if (!assertValidUploadedImage(req.file)) {
+        return res.status(400).json({ error: 'La fotografía subida no es una imagen JPG, PNG o WEBP válida.' })
+      }
       const description = String(body.description || '').trim()
       if (!description) {
         return res.status(400).json({ error: 'La descripción es obligatoria.' })
       }
 
       const evidenceUrl = `/uploads/evidences/${req.file.filename}`
-      const lat = body.lat !== undefined && body.lat !== '' ? Number(body.lat) : null
-      const lng = body.lng !== undefined && body.lng !== '' ? Number(body.lng) : null
+      const lat = parseCoordinate(body.lat, -90, 90, 'lat')
+      const lng = parseCoordinate(body.lng, -180, 180, 'lng')
       const hoursSpent = body.hours_spent !== undefined && body.hours_spent !== '' ? Number(body.hours_spent) : 0
 
       const result = await withTransaction(
@@ -524,8 +638,9 @@ app.post(
       broadcastEvent('report:updated', { id: reportId, status: result.nextStatus })
       res.status(201).json(result)
     } catch (err) {
+      const code = err.statusCode || 500
       console.error('POST evidences error:', err)
-      res.status(500).json({ error: err.message || 'Error al registrar evidencia.' })
+      res.status(code).json({ error: err.message || 'Error al registrar evidencia.' })
     }
   }
 )
@@ -667,7 +782,10 @@ app.get('/api/operators', requireAuth, requireRoles('admin', 'supervisor'), asyn
 
 app.patch('/api/operators/:id', requireAuth, requireRoles('admin'), async (req, res) => {
   try {
-    const userId = req.params.id
+    const userId = String(req.params.id || '')
+    if (!UUID_REGEX.test(userId)) {
+      return res.status(400).json({ error: 'ID de operario inválido.' })
+    }
     const zoneId = req.body?.zone_id === null || req.body?.zone_id === '' ? null : Number(req.body?.zone_id)
     const crewId =
       req.body?.crew_id === undefined
@@ -738,3 +856,4 @@ async function start() {
 }
 
 start()
+
