@@ -11,65 +11,60 @@ import { pool, withTransaction } from './db.js'
 import { optionalAuth, requireAuth, requireRoles, signToken, verifyPassword } from './auth.js'
 import { addSseClient, broadcastEvent } from './events.js'
 import { seedDatabase } from './seed.js'
+import {
+  S3_BUCKET,
+  checkS3Health,
+  ensureBucketExists,
+  getObjectBufferFromS3,
+  getObjectFromS3,
+  getPresignedDownloadUrl,
+  isValidImageBuffer,
+  uploadBufferToS3
+} from './storage.js'
+import { generateExecutiveReportPdf, generatePqrReceiptPdf } from './pdf.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
 const PORT = Number(process.env.API_PORT || 3001)
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173'
-const UPLOADS_DIR = path.resolve(__dirname, '../uploads')
-
-fs.mkdirSync(path.join(UPLOADS_DIR, 'reports'), { recursive: true })
-fs.mkdirSync(path.join(UPLOADS_DIR, 'evidences'), { recursive: true })
+const LEGACY_UPLOADS_DIR = path.resolve(__dirname, '../uploads')
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9._-]+$/
 
-function validateImageMagicBytes(filePath) {
-  const fd = fs.openSync(filePath, 'r')
-  try {
-    const buf = Buffer.alloc(12)
-    const bytesRead = fs.readSync(fd, buf, 0, 12, 0)
-    if (bytesRead < 8) return false
-    // JPEG: FF D8 FF
-    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true
-    // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if (
-      buf[0] === 0x89 &&
-      buf[1] === 0x50 &&
-      buf[2] === 0x4e &&
-      buf[3] === 0x47 &&
-      buf[4] === 0x0d &&
-      buf[5] === 0x0a &&
-      buf[6] === 0x1a &&
-      buf[7] === 0x0a
-    ) {
-      return true
-    }
-    // WEBP: RIFF....WEBP
-    if (
-      bytesRead >= 12 &&
-      buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
-      buf.subarray(8, 12).toString('ascii') === 'WEBP'
-    ) {
-      return true
-    }
-    return false
-  } finally {
-    fs.closeSync(fd)
-  }
-}
-
-function assertValidUploadedImage(file) {
-  if (!file) return true
-  if (validateImageMagicBytes(file.path)) return true
-  try {
-    fs.unlinkSync(file.path)
-  } catch {
-    // Ignore cleanup errors
-  }
-  return false
-}
+const ALLOWED_CATEGORIES = new Set([
+  'fuga_agua',
+  'fuga_alcantarillado',
+  'tuberia_rota',
+  'dano_pavimento',
+  'dano_infraestructura',
+  'otro'
+])
+const ALLOWED_PRIORITIES = new Set(['BAJA', 'MEDIA', 'ALTA', 'CRITICA'])
+const ALLOWED_STATUSES = new Set([
+  'REPORTADO',
+  'CLASIFICADO',
+  'ASIGNADO',
+  'EN_PROGRESO',
+  'EVIDENCIA_PENDIENTE',
+  'VERIFICACION_SUPERVISOR',
+  'RESUELTO',
+  'CERRADO',
+  'EVALUADO',
+  'RECHAZADO'
+])
+const ALLOWED_SOURCES = new Set([
+  'WEB',
+  'OFFLINE',
+  'WHATSAPP',
+  'APP_MOVIL',
+  'TELEFONO',
+  'CORREO',
+  'PRESENCIAL',
+  'BOTON_EMERGENCIA'
+])
 
 function createRateLimiter({ windowMs, max, keyFn }) {
   const hits = new Map()
@@ -120,49 +115,10 @@ function parseCoordinate(raw, min, max, label) {
   }
   return num
 }
-const ALLOWED_CATEGORIES = new Set([
-  'fuga_agua',
-  'fuga_alcantarillado',
-  'tuberia_rota',
-  'dano_pavimento',
-  'dano_infraestructura',
-  'otro'
-])
-const ALLOWED_PRIORITIES = new Set(['BAJA', 'MEDIA', 'ALTA', 'CRITICA'])
-const ALLOWED_STATUSES = new Set([
-  'REPORTADO',
-  'CLASIFICADO',
-  'ASIGNADO',
-  'EN_PROGRESO',
-  'EVIDENCIA_PENDIENTE',
-  'VERIFICACION_SUPERVISOR',
-  'RESUELTO',
-  'CERRADO',
-  'EVALUADO',
-  'RECHAZADO'
-])
-const ALLOWED_SOURCES = new Set([
-  'WEB',
-  'OFFLINE',
-  'WHATSAPP',
-  'APP_MOVIL',
-  'TELEFONO',
-  'CORREO',
-  'PRESENCIAL',
-  'BOTON_EMERGENCIA'
-])
 
-function createUploader(subfolder) {
-  const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, path.join(UPLOADS_DIR, subfolder)),
-    filename: (_req, file, cb) => {
-      const ext = file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/webp' ? 'webp' : 'jpg'
-      cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`)
-    }
-  })
-
+function createMemoryUploader() {
   return multer({
-    storage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       if (!ALLOWED_MIME.has(file.mimetype)) {
@@ -173,8 +129,93 @@ function createUploader(subfolder) {
   })
 }
 
-const uploadReportPhoto = createUploader('reports')
-const uploadEvidencePhoto = createUploader('evidences')
+const uploadImage = createMemoryUploader()
+
+async function uploadValidatedImageToS3(file, folder) {
+  if (!file) return null
+  if (!isValidImageBuffer(file.buffer)) {
+    throw Object.assign(new Error('El archivo subido no es una imagen JPG, PNG o WEBP válida.'), { statusCode: 400 })
+  }
+  const ext = file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/webp' ? 'webp' : 'jpg'
+  const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`
+  const key = `${folder}/${filename}`
+  await uploadBufferToS3({
+    key,
+    body: file.buffer,
+    contentType: file.mimetype,
+    metadata: { folder }
+  })
+  return `/api/files/${folder}/${filename}`
+}
+
+function extractS3KeyFromAssetPath(assetPath) {
+  if (!assetPath) return null
+  if (assetPath.startsWith('/api/files/')) {
+    return assetPath.slice('/api/files/'.length)
+  }
+  if (assetPath.startsWith('/uploads/')) {
+    return assetPath.slice('/uploads/'.length)
+  }
+  return null
+}
+
+async function readAssetBuffer(assetPath) {
+  const key = extractS3KeyFromAssetPath(assetPath)
+  if (!key) return null
+  const s3Buf = await getObjectBufferFromS3(key)
+  if (s3Buf) return s3Buf
+  // Fallback legacy local disk (solo para archivos previos a la migración S3)
+  const localPath = path.join(LEGACY_UPLOADS_DIR, key)
+  if (localPath.startsWith(LEGACY_UPLOADS_DIR) && fs.existsSync(localPath)) {
+    return fs.readFileSync(localPath)
+  }
+  return null
+}
+
+function escapeCsvCell(value) {
+  const raw = value === null || value === undefined ? '' : String(value)
+  // Prevenir CSV / Excel Formula Injection
+  const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
+  return `"${safe.replace(/"/g, '""')}"`
+}
+
+function buildFilteredReportsQuery({ periodo, categoria, zona, nivelRiesgo }) {
+  const clauses = []
+  const params = []
+
+  if (periodo === 'hoy') {
+    clauses.push(`r.created_at >= date_trunc('day', NOW() AT TIME ZONE 'America/Bogota') AT TIME ZONE 'America/Bogota'`)
+  } else if (periodo === '7dias') {
+    clauses.push(`r.created_at >= NOW() - INTERVAL '7 days'`)
+  } else if (periodo === '30dias') {
+    clauses.push(`r.created_at >= NOW() - INTERVAL '30 days'`)
+  }
+
+  if (categoria && categoria !== 'todos' && ALLOWED_CATEGORIES.has(categoria)) {
+    params.push(categoria)
+    clauses.push(`r.category = $${params.length}`)
+  }
+
+  if (zona && zona !== 'todas' && !Number.isNaN(Number(zona))) {
+    params.push(Number(zona))
+    clauses.push(`r.zone_id = $${params.length}`)
+  }
+
+  if (nivelRiesgo && nivelRiesgo !== 'todos' && ALLOWED_PRIORITIES.has(String(nivelRiesgo).toUpperCase())) {
+    params.push(String(nivelRiesgo).toUpperCase())
+    clauses.push(`r.priority = $${params.length}`)
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''
+  return {
+    sql: `SELECT r.*, z.name AS zone_name, z.sla_hours
+          FROM public.reports r
+          LEFT JOIN public.zones z ON z.id = r.zone_id
+          ${where}
+          ORDER BY r.created_at DESC`,
+    params
+  }
+}
 
 const app = express()
 app.disable('x-powered-by')
@@ -192,21 +233,51 @@ app.use((_req, res, next) => {
 app.use(
   cors({
     origin: CORS_ORIGIN.split(',').map((s) => s.trim()),
-    credentials: true
+    credentials: true,
+    exposedHeaders: ['Content-Disposition', 'X-Document-SHA256', 'X-S3-Key', 'X-Document-Id']
   })
 )
 app.use(express.json({ limit: '2mb' }))
-app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '1d' }))
+if (fs.existsSync(LEGACY_UPLOADS_DIR)) {
+  app.use('/uploads', express.static(LEGACY_UPLOADS_DIR, { maxAge: '1d' }))
+}
 
 // ─────────────────────────────────────────────
-// HEALTHCHECK
+// HEALTHCHECK (Postgres + MinIO S3)
 // ─────────────────────────────────────────────
 app.get('/api/health', async (_req, res) => {
   try {
-    await pool.query('SELECT 1')
-    res.json({ status: 'ok', database: 'postgresql', timestamp: new Date().toISOString() })
+    await Promise.all([pool.query('SELECT 1'), checkS3Health()])
+    res.json({
+      status: 'ok',
+      database: 'postgresql',
+      storage: 's3-minio',
+      bucket: S3_BUCKET,
+      timestamp: new Date().toISOString()
+    })
   } catch (err) {
     res.status(503).json({ status: 'error', error: err.message })
+  }
+})
+
+// ─────────────────────────────────────────────
+// PROXY SEGURO DE ARCHIVOS DESDE MINIO S3
+// ─────────────────────────────────────────────
+app.get('/api/files/:folder/:filename', async (req, res) => {
+  try {
+    const { folder, filename } = req.params
+    if (!['reports', 'evidences'].includes(folder) || !SAFE_FILENAME_REGEX.test(filename)) {
+      return res.status(400).json({ error: 'Ruta de archivo inválida.' })
+    }
+    const key = `${folder}/${filename}`
+    const obj = await getObjectFromS3(key)
+    res.setHeader('Content-Type', obj.contentType)
+    if (obj.contentLength) res.setHeader('Content-Length', String(obj.contentLength))
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    obj.body.pipe(res)
+  } catch (err) {
+    const code = err?.$metadata?.httpStatusCode === 404 || err?.name === 'NoSuchKey' ? 404 : 500
+    res.status(code).json({ error: code === 404 ? 'Archivo no encontrado en S3.' : 'Error leyendo objeto S3.' })
   }
 })
 
@@ -275,7 +346,7 @@ app.get('/api/events', requireAuth, requireRoles('admin', 'supervisor', 'operato
 })
 
 // ─────────────────────────────────────────────
-// ZONAS (Público: solo catálogo geográfico)
+// ZONAS (Público: catálogo geográfico)
 // ─────────────────────────────────────────────
 app.get('/api/zones', async (_req, res) => {
   try {
@@ -293,13 +364,8 @@ app.get('/api/zones', async (_req, res) => {
 // REPORTES CIUDADANOS Y GESTIÓN OPERATIVA
 // ─────────────────────────────────────────────
 
-// Crear reporte (ciudadano anónimo o usuario autenticado)
-app.post('/api/reports', reportRateLimiter, optionalAuth, uploadReportPhoto.single('photo'), async (req, res) => {
+app.post('/api/reports', reportRateLimiter, optionalAuth, uploadImage.single('photo'), async (req, res) => {
   try {
-    if (req.file && !assertValidUploadedImage(req.file)) {
-      return res.status(400).json({ error: 'El archivo subido no es una imagen JPG, PNG o WEBP válida.' })
-    }
-
     const body = req.body || {}
     const category = ALLOWED_CATEGORIES.has(body.category) ? body.category : 'otro'
     const priority = ALLOWED_PRIORITIES.has(body.priority) ? body.priority : 'BAJA'
@@ -313,7 +379,7 @@ app.post('/api/reports', reportRateLimiter, optionalAuth, uploadReportPhoto.sing
       return res.status(400).json({ error: 'Debe seleccionar una zona válida.' })
     }
 
-    const photoPath = req.file ? `/uploads/reports/${req.file.filename}` : null
+    const photoPath = await uploadValidatedImageToS3(req.file, 'reports')
 
     const created = await withTransaction(
       async (client) => {
@@ -334,18 +400,15 @@ app.post('/api/reports', reportRateLimiter, optionalAuth, uploadReportPhoto.sing
             address,
             String(body.sector || '').trim() || null,
             zoneId,
-            Number.isFinite(lat) ? lat : null,
-            Number.isFinite(lng) ? lng : null,
+            lat,
+            lng,
             photoPath,
             source
           ]
         )
 
         const report = rows[0]
-
-        // Intentar asignación automática de cuadrilla
         await client.query('SELECT public.assign_crew_automatically($1)', [report.id])
-
         const { rows: refreshed } = await client.query('SELECT * FROM public.reports WHERE id = $1', [report.id])
         return refreshed[0]
       },
@@ -364,7 +427,8 @@ app.post('/api/reports', reportRateLimiter, optionalAuth, uploadReportPhoto.sing
       id: created.id,
       tracking_code: created.tracking_code,
       status: created.status,
-      work_order: created.work_order
+      work_order: created.work_order,
+      photo_path: created.photo_path
     })
   } catch (err) {
     const code = err.statusCode || 500
@@ -413,6 +477,96 @@ app.get('/api/reports/track/:code', async (req, res) => {
   }
 })
 
+// Generar y archivar en MinIO S3 el Comprobante Legal PQR en PDF
+app.get('/api/reports/track/:code/pdf', optionalAuth, async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim().toUpperCase()
+    if (!code) return res.status(400).json({ error: 'Código PQR requerido.' })
+
+    const { rows } = await pool.query(
+      `SELECT
+         r.id, r.tracking_code, r.status, r.address, r.sector, r.category,
+         r.priority, r.created_at, r.resolved_at, r.closed_at, r.updated_at,
+         r.photo_path, r.evidence_path, r.work_order, r.zone_id,
+         z.name AS zone_name
+       FROM public.reports r
+       LEFT JOIN public.zones z ON z.id = r.zone_id
+       WHERE UPPER(r.tracking_code) = $1`,
+      [code]
+    )
+
+    const report = rows[0]
+    if (!report) {
+      return res.status(404).json({ error: 'Reporte no encontrado.' })
+    }
+
+    const { rows: history } = await pool.query(
+      `SELECT previous_status, new_status, notes, created_at
+       FROM public.report_history
+       WHERE report_id = $1
+       ORDER BY created_at DESC`,
+      [report.id]
+    )
+
+    const [photoBuffer, evidenceBuffer] = await Promise.all([
+      readAssetBuffer(report.photo_path),
+      readAssetBuffer(report.evidence_path)
+    ])
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const fileName = `Comprobante-${report.tracking_code}.pdf`
+    const s3Key = `pdfs/pqr/${report.tracking_code}-${timestamp}.pdf`
+
+    const pdfBuffer = await generatePqrReceiptPdf({
+      report,
+      history,
+      photoBuffer,
+      evidenceBuffer,
+      s3Key
+    })
+
+    const uploaded = await uploadBufferToS3({
+      key: s3Key,
+      body: pdfBuffer,
+      contentType: 'application/pdf',
+      metadata: {
+        doc_type: 'COMPROBANTE_PQR',
+        tracking_code: report.tracking_code
+      }
+    })
+
+    const { rows: docRows } = await pool.query(
+      `INSERT INTO public.documents (
+        report_id, doc_type, s3_bucket, s3_key, file_name, mime_type, size_bytes, sha256_hash, generated_by
+      ) VALUES ($1, 'COMPROBANTE_PQR', $2, $3, $4, 'application/pdf', $5, $6, $7)
+      RETURNING *`,
+      [report.id, uploaded.bucket, uploaded.key, fileName, uploaded.size, uploaded.sha256, req.user?.id || null]
+    )
+
+    const savedDoc = docRows[0]
+
+    if (req.query.format === 'json') {
+      const presignedUrl = await getPresignedDownloadUrl(savedDoc.s3_key, { fileName })
+      return res.json({
+        document: savedDoc,
+        download_url: `/api/documents/${savedDoc.id}/download?code=${encodeURIComponent(report.tracking_code)}`,
+        presigned_url: presignedUrl
+      })
+    }
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+    res.setHeader('Content-Length', String(pdfBuffer.length))
+    res.setHeader('X-Document-SHA256', uploaded.sha256)
+    res.setHeader('X-S3-Key', uploaded.key)
+    res.setHeader('X-Document-Id', String(savedDoc.id))
+    res.send(pdfBuffer)
+  } catch (err) {
+    console.error('GET /api/reports/track/:code/pdf error:', err)
+    res.status(500).json({ error: 'Error al generar el comprobante PDF.' })
+  }
+})
+
 // Listar todos los reportes (SOLO personal autenticado)
 app.get('/api/reports', requireAuth, requireRoles('admin', 'supervisor', 'operator'), async (_req, res) => {
   try {
@@ -429,12 +583,12 @@ app.get('/api/reports', requireAuth, requireRoles('admin', 'supervisor', 'operat
   }
 })
 
-// Actualizar reporte (RBAC estricto según rol)
+// Actualizar reporte (RBAC estricto)
 app.patch(
   '/api/reports/:id',
   requireAuth,
   requireRoles('admin', 'supervisor', 'operator'),
-  uploadEvidencePhoto.single('evidence'),
+  uploadImage.single('evidence'),
   async (req, res) => {
     try {
       const reportId = Number(req.params.id)
@@ -448,18 +602,15 @@ app.patch(
         return res.status(400).json({ error: 'Estado de reporte inválido.' })
       }
 
-      // Solo admin/supervisor puede cerrar un reporte
       if (newStatus === 'CERRADO' && !['admin', 'supervisor'].includes(req.user.role)) {
         return res.status(403).json({ error: 'Solo supervisores o administradores pueden cerrar un reporte.' })
       }
 
-      if (req.file && !assertValidUploadedImage(req.file)) {
-        return res.status(400).json({ error: 'El archivo de evidencia no es una imagen JPG, PNG o WEBP válida.' })
-      }
-      const evidencePath = req.file ? `/uploads/evidences/${req.file.filename}` : undefined
       if (body.assigned_operator_id && !UUID_REGEX.test(String(body.assigned_operator_id))) {
         return res.status(400).json({ error: 'ID de operador asignado inválido.' })
       }
+
+      const evidencePath = await uploadValidatedImageToS3(req.file, 'evidences')
 
       const updated = await withTransaction(
         async (client) => {
@@ -522,7 +673,6 @@ app.patch(
   }
 )
 
-// Asignación automática de cuadrilla
 app.post('/api/reports/:id/assign-auto', requireAuth, requireRoles('admin', 'supervisor'), async (req, res) => {
   try {
     const reportId = Number(req.params.id)
@@ -550,7 +700,7 @@ app.post('/api/reports/:id/assign-auto', requireAuth, requireRoles('admin', 'sup
 })
 
 // ─────────────────────────────────────────────
-// EVIDENCIAS DE CAMPO (OPERARIOS)
+// EVIDENCIAS DE CAMPO (S3 / MINIO)
 // ─────────────────────────────────────────────
 app.get('/api/reports/:id/evidences', requireAuth, requireRoles('admin', 'supervisor', 'operator'), async (req, res) => {
   try {
@@ -574,7 +724,7 @@ app.post(
   '/api/reports/:id/evidences',
   requireAuth,
   requireRoles('admin', 'supervisor', 'operator'),
-  uploadEvidencePhoto.single('photo'),
+  uploadImage.single('photo'),
   async (req, res) => {
     try {
       const reportId = Number(req.params.id)
@@ -582,18 +732,16 @@ app.post(
       if (!req.file) {
         return res.status(400).json({ error: 'La fotografía de evidencia es obligatoria.' })
       }
-      if (!assertValidUploadedImage(req.file)) {
-        return res.status(400).json({ error: 'La fotografía subida no es una imagen JPG, PNG o WEBP válida.' })
-      }
       const description = String(body.description || '').trim()
       if (!description) {
         return res.status(400).json({ error: 'La descripción es obligatoria.' })
       }
 
-      const evidenceUrl = `/uploads/evidences/${req.file.filename}`
       const lat = parseCoordinate(body.lat, -90, 90, 'lat')
       const lng = parseCoordinate(body.lng, -180, 180, 'lng')
       const hoursSpent = body.hours_spent !== undefined && body.hours_spent !== '' ? Number(body.hours_spent) : 0
+
+      const evidenceUrl = await uploadValidatedImageToS3(req.file, 'evidences')
 
       const result = await withTransaction(
         async (client) => {
@@ -613,8 +761,8 @@ app.post(
               description,
               isArrival ? 'N/A (Llegada al sitio)' : String(body.materials || '').trim() || null,
               isArrival ? 0 : (Number.isFinite(hoursSpent) && hoursSpent >= 0 ? hoursSpent : 0),
-              Number.isFinite(lat) ? lat : null,
-              Number.isFinite(lng) ? lng : null,
+              lat,
+              lng,
               req.user.id
             ]
           )
@@ -713,30 +861,33 @@ app.post('/api/ratings', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'La calificación debe ser un entero entre 1 y 5.' })
     }
 
-    const rating = await withTransaction(async (client) => {
-      const { rows: repRows } = await client.query(
-        'SELECT id, status FROM public.reports WHERE UPPER(tracking_code) = $1',
-        [trackingCode]
-      )
-      const report = repRows[0]
-      if (!report) {
-        throw Object.assign(new Error('Reporte no encontrado.'), { statusCode: 404 })
-      }
-      if (report.status === 'EVALUADO') {
-        throw Object.assign(new Error('Este reporte ya fue evaluado previamente.'), { statusCode: 409 })
-      }
-      if (report.status !== 'CERRADO') {
-        throw Object.assign(new Error('Solo se pueden evaluar reportes cerrados.'), { statusCode: 400 })
-      }
+    const rating = await withTransaction(
+      async (client) => {
+        const { rows: repRows } = await client.query(
+          'SELECT id, status FROM public.reports WHERE UPPER(tracking_code) = $1',
+          [trackingCode]
+        )
+        const report = repRows[0]
+        if (!report) {
+          throw Object.assign(new Error('Reporte no encontrado.'), { statusCode: 404 })
+        }
+        if (report.status === 'EVALUADO') {
+          throw Object.assign(new Error('Este reporte ya fue evaluado previamente.'), { statusCode: 409 })
+        }
+        if (report.status !== 'CERRADO') {
+          throw Object.assign(new Error('Solo se pueden evaluar reportes cerrados.'), { statusCode: 400 })
+        }
 
-      const { rows } = await client.query(
-        `INSERT INTO public.ratings (report_id, citizen_id, score, comment)
-         VALUES ($1,$2,$3,$4)
-         RETURNING *`,
-        [report.id, req.user?.id || null, score, comment]
-      )
-      return rows[0]
-    }, { notes: 'Reporte calificado por ciudadano en encuesta CSAT' })
+        const { rows } = await client.query(
+          `INSERT INTO public.ratings (report_id, citizen_id, score, comment)
+           VALUES ($1,$2,$3,$4)
+           RETURNING *`,
+          [report.id, req.user?.id || null, score, comment]
+        )
+        return rows[0]
+      },
+      { notes: 'Reporte calificado por ciudadano en encuesta CSAT' }
+    )
 
     broadcastEvent('report:updated', { id: rating.report_id, status: 'EVALUADO' })
     res.status(201).json(rating)
@@ -813,7 +964,7 @@ app.patch('/api/operators/:id', requireAuth, requireRoles('admin'), async (req, 
 })
 
 // ─────────────────────────────────────────────
-// ANALÍTICA (Vistas PostgreSQL)
+// ANALÍTICA Y EXPORTACIÓN DE REPORTES (PDF EN S3 + CSV)
 // ─────────────────────────────────────────────
 app.get('/api/analytics/zones', requireAuth, requireRoles('admin', 'supervisor', 'operator'), async (_req, res) => {
   try {
@@ -836,6 +987,213 @@ app.get('/api/analytics/sla', requireAuth, requireRoles('admin', 'supervisor'), 
   }
 })
 
+// Exportar Informe Ejecutivo PDF y archivarlo en MinIO S3
+app.post('/api/analytics/export/pdf', requireAuth, requireRoles('admin', 'supervisor'), async (req, res) => {
+  try {
+    const filters = {
+      periodo: req.body?.periodo || 'todos',
+      categoria: req.body?.categoria || 'todos',
+      zona: req.body?.zona ?? 'todas',
+      nivelRiesgo: req.body?.nivelRiesgo || 'todos'
+    }
+
+    const query = buildFilteredReportsQuery(filters)
+    const [reportsRes, zonesRes, crewsRes, slaRes] = await Promise.all([
+      pool.query(query.sql, query.params),
+      pool.query('SELECT * FROM public.reports_by_zone'),
+      pool.query('SELECT * FROM public.crew_efficiency ORDER BY crew_name ASC'),
+      pool.query('SELECT * FROM public.vw_kpi_sla_compliance')
+    ])
+
+    const reports = reportsRes.rows
+    const pendingStatuses = new Set([
+      'REPORTADO',
+      'CLASIFICADO',
+      'ASIGNADO',
+      'EN_PROGRESO',
+      'EVIDENCIA_PENDIENTE',
+      'VERIFICACION_SUPERVISOR'
+    ])
+    const resolvedStatuses = new Set(['RESUELTO', 'CERRADO', 'EVALUADO'])
+
+    const summary = {
+      total: reports.length,
+      pending: reports.filter((r) => pendingStatuses.has(r.status)).length,
+      resolved: reports.filter((r) => resolvedStatuses.has(r.status)).length,
+      critical: reports.filter((r) => pendingStatuses.has(r.status) && r.priority === 'CRITICA').length,
+      slaPct: slaRes.rows[0]?.compliance_percentage ?? null
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const fileName = `Informe-Ejecutivo-ESSMAR-${timestamp.slice(0, 10)}.pdf`
+    const s3Key = `pdfs/executive/informe-ejecutivo-${timestamp}.pdf`
+
+    const pdfBuffer = await generateExecutiveReportPdf({
+      generatedBy: req.user.full_name || req.user.email,
+      filters,
+      summary,
+      byZone: zonesRes.rows,
+      crews: crewsRes.rows,
+      reports,
+      s3Key
+    })
+
+    const uploaded = await uploadBufferToS3({
+      key: s3Key,
+      body: pdfBuffer,
+      contentType: 'application/pdf',
+      metadata: {
+        doc_type: 'REPORTE_EJECUTIVO',
+        generated_by: req.user.email
+      }
+    })
+
+    const { rows: docRows } = await pool.query(
+      `INSERT INTO public.documents (
+        report_id, doc_type, s3_bucket, s3_key, file_name, mime_type, size_bytes, sha256_hash, generated_by
+      ) VALUES (NULL, 'REPORTE_EJECUTIVO', $1, $2, $3, 'application/pdf', $4, $5, $6)
+      RETURNING *`,
+      [uploaded.bucket, uploaded.key, fileName, uploaded.size, uploaded.sha256, req.user.id]
+    )
+
+    const savedDoc = docRows[0]
+
+    if (req.query.download === '1') {
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+      res.setHeader('Content-Length', String(pdfBuffer.length))
+      res.setHeader('X-Document-SHA256', uploaded.sha256)
+      res.setHeader('X-S3-Key', uploaded.key)
+      res.setHeader('X-Document-Id', String(savedDoc.id))
+      return res.send(pdfBuffer)
+    }
+
+    const presignedUrl = await getPresignedDownloadUrl(savedDoc.s3_key, { fileName })
+    res.status(201).json({
+      document: savedDoc,
+      download_url: `/api/documents/${savedDoc.id}/download`,
+      presigned_url: presignedUrl
+    })
+  } catch (err) {
+    console.error('POST /api/analytics/export/pdf error:', err)
+    res.status(500).json({ error: 'Error al generar el informe ejecutivo PDF.' })
+  }
+})
+
+// Exportar reportes filtrados a CSV (UTF-8 BOM compatible con Excel)
+app.get('/api/analytics/export/csv', requireAuth, requireRoles('admin', 'supervisor'), async (req, res) => {
+  try {
+    const query = buildFilteredReportsQuery({
+      periodo: req.query.periodo || 'todos',
+      categoria: req.query.categoria || 'todos',
+      zona: req.query.zona || 'todas',
+      nivelRiesgo: req.query.nivelRiesgo || 'todos'
+    })
+    const { rows } = await pool.query(query.sql, query.params)
+
+    const headers = [
+      'PQR',
+      'Fecha',
+      'Categoria',
+      'Prioridad',
+      'Estado',
+      'Zona',
+      'Direccion',
+      'Cuadrilla',
+      'Canal',
+      'Reincidente',
+      'Horas_Atencion'
+    ]
+    const lines = [
+      headers.join(','),
+      ...rows.map((r) =>
+        [
+          r.tracking_code,
+          r.created_at,
+          r.category,
+          r.priority,
+          r.status,
+          r.zone_name || '',
+          r.address,
+          r.work_order || '',
+          r.source,
+          r.is_recurrent ? 'SI' : 'NO',
+          r.attention_hours ?? ''
+        ]
+          .map(escapeCsvCell)
+          .join(',')
+      )
+    ]
+
+    const csvContent = '\uFEFF' + lines.join('\r\n')
+    const fileName = `Reportes-ESSMAR-${new Date().toISOString().slice(0, 10)}.csv`
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+    res.send(csvContent)
+  } catch (err) {
+    console.error('GET /api/analytics/export/csv error:', err)
+    res.status(500).json({ error: 'Error al exportar CSV.' })
+  }
+})
+
+// ─────────────────────────────────────────────
+// REPOSITORIO DE DOCUMENTOS PDF ARCHIVADOS EN S3
+// ─────────────────────────────────────────────
+app.get('/api/documents', requireAuth, requireRoles('admin', 'supervisor'), async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT d.*, r.tracking_code, u.full_name AS generator_name, u.email AS generator_email
+       FROM public.documents d
+       LEFT JOIN public.reports r ON r.id = d.report_id
+       LEFT JOIN public.users u ON u.id = d.generated_by
+       ORDER BY d.created_at DESC
+       LIMIT 50`
+    )
+    res.json(rows)
+  } catch (err) {
+    console.error('GET /api/documents error:', err)
+    res.status(500).json({ error: 'Error al consultar documentos S3.' })
+  }
+})
+
+app.get('/api/documents/:id/download', optionalAuth, async (req, res) => {
+  try {
+    const docId = Number(req.params.id)
+    if (!Number.isInteger(docId) || docId <= 0) {
+      return res.status(400).json({ error: 'ID de documento inválido.' })
+    }
+
+    const { rows } = await pool.query(
+      `SELECT d.*, r.tracking_code
+       FROM public.documents d
+       LEFT JOIN public.reports r ON r.id = d.report_id
+       WHERE d.id = $1`,
+      [docId]
+    )
+    const doc = rows[0]
+    if (!doc) return res.status(404).json({ error: 'Documento no encontrado.' })
+
+    const isStaff = req.user && ['admin', 'supervisor'].includes(req.user.role)
+    const codeParam = String(req.query.code || '').trim().toUpperCase()
+    const isValidCitizenPqr = doc.doc_type === 'COMPROBANTE_PQR' && codeParam && codeParam === doc.tracking_code
+
+    if (!isStaff && !isValidCitizenPqr) {
+      return res.status(403).json({ error: 'No autorizado para descargar este documento.' })
+    }
+
+    const obj = await getObjectFromS3(doc.s3_key)
+    res.setHeader('Content-Type', doc.mime_type || 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${doc.file_name.replace(/"/g, '')}"`)
+    res.setHeader('X-Document-SHA256', doc.sha256_hash)
+    res.setHeader('X-S3-Key', doc.s3_key)
+    if (obj.contentLength) res.setHeader('Content-Length', String(obj.contentLength))
+    obj.body.pipe(res)
+  } catch (err) {
+    console.error('GET /api/documents/:id/download error:', err)
+    res.status(500).json({ error: 'Error al descargar documento desde S3.' })
+  }
+})
+
 // Manejo centralizado de errores (ej. multer)
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error:', err)
@@ -845,9 +1203,10 @@ app.use((err, _req, res, _next) => {
 async function start() {
   try {
     await pool.query('SELECT 1')
+    await ensureBucketExists()
     await seedDatabase()
     app.listen(PORT, '127.0.0.1', () => {
-      console.log(`ESSMAR SIGVI API escuchando en http://127.0.0.1:${PORT}`)
+      console.log(`ESSMAR SIGVI API escuchando en http://127.0.0.1:${PORT} (S3 bucket: ${S3_BUCKET})`)
     })
   } catch (err) {
     console.error('No se pudo inicializar el servidor:', err)
@@ -856,4 +1215,3 @@ async function start() {
 }
 
 start()
-

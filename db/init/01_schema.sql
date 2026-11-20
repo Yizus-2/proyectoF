@@ -184,6 +184,27 @@ CREATE TABLE IF NOT EXISTS public.ratings (
 );
 
 -- ─────────────────────────────────────────────
+-- 8b. DOCUMENTOS PDF ARCHIVADOS EN S3 / MINIO
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.documents (
+  id           BIGSERIAL PRIMARY KEY,
+  report_id    BIGINT REFERENCES public.reports(id) ON DELETE CASCADE,
+  doc_type     TEXT NOT NULL CHECK (doc_type IN ('COMPROBANTE_PQR', 'REPORTE_EJECUTIVO')),
+  s3_bucket    TEXT NOT NULL,
+  s3_key       TEXT UNIQUE NOT NULL,
+  file_name    TEXT NOT NULL,
+  mime_type    TEXT NOT NULL DEFAULT 'application/pdf',
+  size_bytes   INTEGER NOT NULL CHECK (size_bytes > 0),
+  sha256_hash  TEXT NOT NULL,
+  generated_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_report   ON public.documents(report_id);
+CREATE INDEX IF NOT EXISTS idx_documents_type     ON public.documents(doc_type);
+CREATE INDEX IF NOT EXISTS idx_documents_created  ON public.documents(created_at DESC);
+
+-- ─────────────────────────────────────────────
 -- 9. FUNCIONES Y TRIGGERS (SIN RACE CONDITIONS NI DOBLE CONTEO)
 -- ─────────────────────────────────────────────
 

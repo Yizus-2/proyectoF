@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-essmar_local_dev_2026}
       TZ: America/Bogota
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - essmar_pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -19,5 +19,20 @@ services:
       timeout: 5s
       retries: 10
 
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: essmar-sigvi-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-essmar_minio_admin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-EssmarMinio2026!}
+    ports:
+      - "127.0.0.1:${S3_PORT:-9000}:9000"
+      - "127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - essmar_minio_data:/data
+
 volumes:
   essmar_pgdata:
+  essmar_minio_data:
