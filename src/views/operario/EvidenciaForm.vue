@@ -100,11 +100,11 @@ async function submitEvidence() {
 
 <template>
   <div class="evidence-form-card">
-    <h3 class="form-title" v-if="currentStatus === 'ASIGNADO'">📸 Registrar Llegada al Sitio (Inicio)</h3>
-    <h3 class="form-title" v-else>📸 Registrar Trabajo Finalizado</h3>
+    <h3 class="form-title" v-if="currentStatus === 'ASIGNADO'">Registrar llegada</h3>
+    <h3 class="form-title" v-else>Finalizar trabajo</h3>
     
-    <p class="form-subtitle" v-if="currentStatus === 'ASIGNADO'">Sube la evidencia inicial para cambiar el estado a "En Progreso".</p>
-    <p class="form-subtitle" v-else>Sube la evidencia final con detalle de materiales para validación del supervisor.</p>
+    <p class="form-subtitle" v-if="currentStatus === 'ASIGNADO'">Adjunta una foto del sitio para iniciar la atención.</p>
+    <p class="form-subtitle" v-else>Adjunta la foto final y los materiales usados para validación.</p>
 
     <div v-if="errorMessage" class="alert alert--danger">
       {{ errorMessage }}
@@ -113,15 +113,14 @@ async function submitEvidence() {
     <form @submit.prevent="submitEvidence" class="form-flow">
       <!-- Foto de evidencia -->
       <div class="form-group">
-        <label class="form-label">Fotografía del trabajo realizado *</label>
+        <label class="form-label" for="photo-input">Fotografía *</label>
         <div class="upload-zone" :class="{ 'has-preview': photoPreview }">
           <label v-if="!photoPreview" for="photo-input" class="upload-prompt">
-            <span class="upload-icon">📷</span>
-            <span class="upload-text">Presiona para tomar foto o seleccionar archivo</span>
+            <span class="upload-text">Tomar foto o elegir archivo</span>
           </label>
           <div v-else class="preview-container">
             <img :src="photoPreview" alt="Vista previa de evidencia" class="evidence-preview-image" />
-            <label for="photo-input" class="btn-change-photo">Cambiar Foto</label>
+            <label for="photo-input" class="btn-change-photo">Cambiar foto</label>
           </div>
           <input
             id="photo-input"
@@ -136,30 +135,30 @@ async function submitEvidence() {
 
       <!-- Descripción -->
       <div class="form-group">
-        <label for="desc" class="form-label">Detalle de Actividades Realizadas *</label>
+        <label for="desc" class="form-label">Trabajo realizado *</label>
         <textarea
           id="desc"
           v-model="description"
           rows="3"
-          placeholder="Ej: Se reparó tubería de 2 pulgadas, sellado con soldadura PVC..."
+          placeholder="Ej: Reparación de tubería PVC de 2 pulgadas y sellado."
           required
         ></textarea>
       </div>
 
       <!-- Materiales (Solo al finalizar) -->
       <div class="form-group" v-if="currentStatus !== 'ASIGNADO'">
-        <label for="mats" class="form-label">Materiales e Insumos Utilizados</label>
+        <label for="mats" class="form-label">Materiales usados</label>
         <input
           id="mats"
           v-model="materials"
           type="text"
-          placeholder="Ej: 1 Unión de 2'', pegamento PVC, pala"
+          placeholder="Ej: Unión PVC 2'', soldadura, arena"
         />
       </div>
 
       <!-- Tiempo dedicado (Solo al finalizar) -->
       <div class="form-group" v-if="currentStatus !== 'ASIGNADO'">
-        <label for="hours" class="form-label">Tiempo Dedicado (Horas)</label>
+        <label for="hours" class="form-label">Tiempo (horas)</label>
         <input
           id="hours"
           v-model.number="hoursSpent"
@@ -172,14 +171,13 @@ async function submitEvidence() {
 
       <!-- Geolocalización -->
       <div class="geo-status">
-        <span class="geo-icon">📍</span>
         <div class="geo-details">
-          <span v-if="geoLoading" class="geo-text loading">Obteniendo coordenadas GPS...</span>
+          <span v-if="geoLoading" class="geo-text loading">Obteniendo ubicación GPS...</span>
           <span v-else-if="lat && lng" class="geo-text success">
-            GPS capturado: {{ lat.toFixed(5) }}, {{ lng.toFixed(5) }}
+            GPS: {{ lat.toFixed(5) }}, {{ lng.toFixed(5) }}
           </span>
           <span v-else class="geo-text warning">
-            {{ geoError || 'No se capturó GPS. Asegúrate de dar permisos.' }}
+            {{ geoError || 'Sin señal GPS. Verifica los permisos.' }}
             <button type="button" class="btn-retry-gps" @click="captureGeo">Reintentar</button>
           </span>
         </div>
@@ -192,7 +190,7 @@ async function submitEvidence() {
         </button>
         <button type="submit" class="btn-submit" :disabled="isSubmitting">
           <span v-if="isSubmitting" class="spinner-sm"></span>
-          {{ isSubmitting ? 'Enviando Evidencia...' : 'Enviar a Supervisor' }}
+          {{ isSubmitting ? 'Guardando...' : 'Guardar evidencia' }}
         </button>
       </div>
     </form>

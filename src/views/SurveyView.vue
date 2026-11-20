@@ -72,9 +72,8 @@ onMounted(() => {
   <main class="survey-layout">
     <div class="survey-card card">
       <div class="survey-header">
-        <div class="survey-logo">⭐</div>
-        <h1>Encuesta de Satisfacción</h1>
-        <p class="subtitle">Tu opinión nos ayuda a mejorar el servicio de ESSMAR.</p>
+        <h1>Califica el servicio</h1>
+        <p class="subtitle">Cuéntanos cómo fue la atención de tu reporte.</p>
       </div>
 
       <div v-if="loading" class="loading-state">
@@ -84,26 +83,26 @@ onMounted(() => {
 
       <div v-else-if="success" class="success-state">
         <div class="success-icon">✓</div>
-        <h2>¡Gracias por tu tiempo!</h2>
-        <p>Tus respuestas han sido registradas exitosamente. El reporte ha sido marcado como EVALUADO.</p>
+        <h2>Gracias por responder</h2>
+        <p>Tu calificación fue guardada.</p>
         <RouterLink to="/" class="btn-primary" style="margin-top: 20px; display: inline-block;">Volver al inicio</RouterLink>
       </div>
 
       <div v-else-if="errorMsg" class="error-state">
-        <p>⚠️ {{ errorMsg }}</p>
+        <p>{{ errorMsg }}</p>
         <RouterLink to="/" class="link-accent">Volver al inicio</RouterLink>
       </div>
 
       <div v-else-if="reportData" class="survey-content">
         <div class="report-summary">
-          <p><strong>Reporte:</strong> {{ trackingCode }}</p>
-          <p><strong>Categoría:</strong> <span style="text-transform: capitalize;">{{ reportData.category.replace('_', ' ') }}</span></p>
-          <p><strong>Ubicación:</strong> {{ reportData.address }}</p>
+          <p><strong>Código:</strong> {{ trackingCode }}</p>
+          <p><strong>Tipo:</strong> <span style="text-transform: capitalize;">{{ reportData.category.replace('_', ' ') }}</span></p>
+          <p><strong>Dirección:</strong> {{ reportData.address }}</p>
         </div>
 
         <form @submit.prevent="submitSurvey" class="survey-form">
           <div class="rating-group">
-            <label>¿Cómo calificas la atención y solución del daño?</label>
+            <label>¿Cómo calificas la solución?</label>
             <div class="stars">
               <button 
                 v-for="star in 5" 
@@ -123,12 +122,12 @@ onMounted(() => {
           </div>
 
           <div class="field">
-            <label for="comment">Comentarios adicionales (opcional)</label>
-            <textarea id="comment" v-model="form.comment" rows="4" placeholder="Cuéntanos más sobre tu experiencia..."></textarea>
+            <label for="comment">Comentarios (opcional)</label>
+            <textarea id="comment" v-model="form.comment" rows="4" placeholder="Escribe un comentario si lo deseas..."></textarea>
           </div>
 
           <button type="submit" class="btn-primary btn-submit" :disabled="submitting || form.score === 0">
-            {{ submitting ? 'Enviando...' : 'Enviar Calificación' }}
+            {{ submitting ? 'Enviando...' : 'Enviar calificación' }}
           </button>
         </form>
       </div>

@@ -43,9 +43,9 @@ const getPeriodoText = () => {
     <!-- Footer: Contexto estricto -->
     <footer class="kpi-footer">
       <div class="kpi-meta">
-        <span class="meta-tag">📊 {{ unidad }}</span>
-        <span class="meta-tag">🕒 {{ getPeriodoText() }}</span>
-        <span class="meta-tag highlight">📂 {{ categoriaActual }}</span>
+        <span class="meta-tag">{{ unidad }}</span>
+        <span class="meta-tag">{{ getPeriodoText() }}</span>
+        <span class="meta-tag highlight">{{ categoriaActual }}</span>
       </div>
 
       <!-- Tooltip Educativo -->

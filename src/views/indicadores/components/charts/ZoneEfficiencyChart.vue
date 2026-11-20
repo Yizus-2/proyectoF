@@ -8,12 +8,12 @@ const store = useIndicadoresStore()
 const reportsStore = useReportsStore()
 
 const kpiConfig = {
-  pregunta: '¿Qué zonas tienen más carga?',
-  contexto: 'Reportes activos distribuidos por zona geográfica',
+  pregunta: 'Carga por zona',
+  contexto: 'Reportes abiertos en cada sector.',
   icono: 'MapPin',
   unidad: 'reportes',
   color: 'blue',
-  accionSugerida: { malo: 'Reasignar cuadrillas de zonas verdes a rojas' }
+  accionSugerida: { malo: 'Reasignar cuadrillas de zonas con menor carga' }
 }
 
 const datos = computed(() => {

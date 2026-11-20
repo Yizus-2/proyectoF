@@ -5,10 +5,10 @@ const toastStore = useToastStore()
 
 function getIcon(type: string) {
   switch (type) {
-    case 'success': return '✅'
-    case 'error': return '🚨'
-    case 'warning': return '⚠️'
-    default: return 'ℹ️'
+    case 'success': return '✓'
+    case 'error': return '!'
+    case 'warning': return '!'
+    default: return 'i'
   }
 }
 </script>

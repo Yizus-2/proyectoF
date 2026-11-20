@@ -109,15 +109,15 @@ onMounted(() => {
   <main class="operarios-view">
     <header class="page-header">
       <div>
-        <h1 class="page-title">Gestión de Operarios y Cuadrillas</h1>
-        <p class="page-subtitle">Administra los correos, zonas asignadas y límites de carga de trabajo.</p>
+        <h1 class="page-title">Operarios y Cuadrillas</h1>
+        <p class="page-subtitle">Zonas asignadas y capacidad activa por equipo.</p>
       </div>
-      <button class="btn-primary" @click="loadData">↻ Actualizar Datos</button>
+      <button class="btn-primary" @click="loadData">Actualizar</button>
     </header>
 
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <p>Cargando información de personal...</p>
+      <p>Cargando personal...</p>
     </div>
 
     <template v-else>
@@ -127,30 +127,30 @@ onMounted(() => {
         <section class="panel panel-left">
           <div class="panel-header">
             <UsersIcon class="w-6 h-6 text-primary" />
-            <h2>Perfiles de Operarios</h2>
+            <h2>Operarios</h2>
           </div>
           <div class="panel-body">
-            <p class="help-text">Lista de usuarios registrados como operarios. Asigna una zona geográfica a cada correo para que el sistema sepa dónde pueden trabajar.</p>
+            <p class="help-text">Asigna la zona de trabajo de cada cuenta operativa.</p>
             
             <div class="table-container">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Nombre / Correo</th>
-                    <th>Cuadrilla Base</th>
-                    <th>Zona Asignada</th>
+                    <th>Nombre y correo</th>
+                    <th>Cuadrilla</th>
+                    <th>Zona</th>
                     <th>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="op in operarios" :key="op.id">
                     <td>
-                      <strong>{{ op.full_name || 'Sin Nombre' }}</strong><br>
+                      <strong>{{ op.full_name || 'Sin nombre' }}</strong><br>
                       <small class="text-muted">{{ op.email }}</small>
                     </td>
                     <td>
                       <span v-if="op.crew_id" class="role-badge">{{ getCuadrillaName(op.crew_id) }}</span>
-                      <span v-else class="text-muted">Sin Cuadrilla</span>
+                      <span v-else class="text-muted">Sin cuadrilla</span>
                     </td>
                     <td>
                       <span class="zone-badge">
@@ -158,7 +158,7 @@ onMounted(() => {
                       </span>
                     </td>
                     <td>
-                      <button class="btn-ghost" @click="openEditModal(op)">Cambiar Zona</button>
+                      <button class="btn-ghost" @click="openEditModal(op)">Cambiar zona</button>
                     </td>
                   </tr>
                 </tbody>
@@ -174,10 +174,10 @@ onMounted(() => {
         <section class="panel panel-right">
           <div class="panel-header">
             <BriefcaseIcon class="w-6 h-6 text-warning" />
-            <h2>Control de Carga (Máx 3 por Cuadrilla)</h2>
+            <h2>Capacidad por cuadrilla</h2>
           </div>
           <div class="panel-body">
-            <p class="help-text">Estado actual de las cuadrillas. Las cuadrillas llenas (3/3) se bloquearán automáticamente para nuevas asignaciones.</p>
+            <p class="help-text">Tope de 3 casos activos por equipo. Al llegar al límite se pausa el despacho automático.</p>
 
             <div class="cuadrillas-list">
               <div 

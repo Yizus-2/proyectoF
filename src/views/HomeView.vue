@@ -13,15 +13,15 @@ const auth = useAuthStore()
       <div class="hero-content">
         <div class="hero-badge animate-slide-up">
           <span class="badge-dot"></span>
-          Plataforma activa 24/7
+          Servicio activo 24/7
         </div>
 
         <h1 class="hero-title animate-slide-up stagger-1">
-          Gestión y Valoración<br/>de Incidentes
+          Reportes de Acueducto<br/>y Alcantarillado
         </h1>
 
         <p class="hero-subtitle animate-slide-up stagger-2">
-          Reporta fugas, alcantarillado rebosado y otros incidentes en la infraestructura de acueducto de tu ciudad. Rápido, fácil y transparente.
+          Informa daños en Santa Marta y haz seguimiento a su reparación.
         </p>
 
         <div class="action-cards">
@@ -34,8 +34,8 @@ const auth = useAuthStore()
               </svg>
             </div>
             <div class="card-text">
-              <h3>Reportar Incidente</h3>
-              <p>Inicia un nuevo reporte geolocalizado en 3 sencillos pasos.</p>
+              <h3>Reportar un daño</h3>
+              <p>Marca el punto en el mapa y sube una foto.</p>
             </div>
             <div class="card-arrow">→</div>
           </RouterLink>
@@ -49,8 +49,8 @@ const auth = useAuthStore()
               </svg>
             </div>
             <div class="card-text">
-              <h3>Consultar Estado</h3>
-              <p>Revisa el progreso de tu reporte usando tu código de seguimiento.</p>
+              <h3>Consultar mi PQR</h3>
+              <p>Revisa el estado con tu código de radicado.</p>
             </div>
             <div class="card-arrow">→</div>
           </RouterLink>
@@ -65,8 +65,8 @@ const auth = useAuthStore()
               </svg>
             </div>
             <div class="card-text">
-              <h3>Portal Operativo</h3>
-              <p>Acceso exclusivo para el personal de gestión y administración.</p>
+              <h3>Acceso funcionarios</h3>
+              <p>Ingreso para cuadrillas, supervisores y administración.</p>
             </div>
             <div class="card-arrow">→</div>
           </RouterLink>

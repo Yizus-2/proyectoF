@@ -185,19 +185,19 @@ function printLegalDocument() {
   <main class="track-layout">
     <div class="track-container">
       <header class="track-header no-print">
-        <h1>Consultar Reporte</h1>
-        <p>Ingresa tu código de seguimiento para ver el estado actual de tu reporte.</p>
+        <h1>Consultar reporte</h1>
+        <p>Ingresa tu código PQR para ver el estado y la cuadrilla asignada.</p>
       </header>
 
       <form @submit.prevent="searchReport" class="search-box no-print">
-        <label for="track-code-input" class="sr-only">Código de seguimiento PQR</label>
+        <label for="track-code-input" class="sr-only">Código PQR</label>
         <input 
           id="track-code-input"
           name="trackingCode"
           v-model="trackingCode" 
           type="text" 
           autocomplete="off"
-          placeholder="Ej: REP-20260510-0002" 
+          placeholder="Ej: REP-20261120-0001" 
           required 
           class="search-input"
         />
@@ -208,7 +208,7 @@ function printLegalDocument() {
       </form>
 
       <div v-if="errorMsg" class="alert-error">
-        ⚠️ {{ errorMsg }}
+        {{ errorMsg }}
       </div>
 
       <div v-if="reportData && !loading" class="result-card">
@@ -223,84 +223,81 @@ function printLegalDocument() {
         </div>
 
         <div class="result-body">
-          <!-- Guía Ciudadana -->
           <div class="user-guide-box">
-            <h4>📖 Guía Ciudadana PQR</h4>
-            <p>Este código (<strong>{{ reportData.tracking_code }}</strong>) es tu <strong>PQR permanente</strong>. No caduca y sirve como comprobante legal de tu solicitud. Úsalo para dar seguimiento continuo hasta la resolución de tu caso.</p>
+            <h4>Radicado PQR</h4>
+            <p>Conserva el código <strong>{{ reportData.tracking_code }}</strong>. No vence y sirve como comprobante de tu solicitud.</p>
           </div>
 
-          <p class="address"><strong>Ubicación:</strong> {{ reportData.address }}</p>
-          <p class="date"><strong>Reportado el:</strong> {{ formatDate(reportData.created_at) }}</p>
+          <p class="address"><strong>Dirección:</strong> {{ reportData.address }}</p>
+          <p class="date"><strong>Radicado:</strong> {{ formatDate(reportData.created_at) }}</p>
           
           <div v-if="reportData.work_order" class="crew-box">
-            <strong>👷 Cuadrilla Asignada:</strong> {{ reportData.work_order }}
+            <strong>Cuadrilla asignada:</strong> {{ reportData.work_order }}
           </div>
 
-          <!-- Notificación Legal -->
           <div v-if="resolvedDate" class="legal-resolution-box">
-            <h4>⚖️ Notificación de Resolución</h4>
-            <p>De acuerdo con el marco legal vigente, este reporte se certifica como <strong>RESUELTO</strong> con fecha exacta: <strong>{{ formatDate(resolvedDate).replace(/\.$/, '') }}</strong>.</p>
+            <h4>Resolución certificada</h4>
+            <p>Caso marcado como resuelto el <strong>{{ formatDate(resolvedDate).replace(/\.$/, '') }}</strong>.</p>
           </div>
           
           <div v-if="photoUrl" class="photo-container">
-            <p><strong>Evidencia fotográfica:</strong></p>
+            <p><strong>Foto inicial:</strong></p>
             <img :src="photoUrl" alt="Foto del reporte" class="report-photo" />
           </div>
 
           <div v-if="evidenceUrl" class="photo-container evidence-container">
-            <p><strong>Evidencia de resolución (Operador):</strong></p>
+            <p><strong>Evidencia de cierre:</strong></p>
             <img :src="evidenceUrl" alt="Evidencia del operador" class="report-photo evidence-photo" />
           </div>
 
           <div class="actions" v-if="reportData.status === 'CERRADO'">
             <RouterLink :to="`/encuesta/${reportData.tracking_code}`" class="btn-ghost no-print">
-              ⭐ Evaluar servicio
+              Calificar servicio
             </RouterLink>
           </div>
 
-          <!-- Botones de Comprobante PDF en S3 e impresión -->
           <div class="print-actions no-print" style="display: flex; gap: 10px; flex-wrap: wrap;">
             <button @click="downloadLegalPdf" class="btn-outline-primary" style="flex: 1;" :disabled="downloadingPdf">
-              {{ downloadingPdf ? '⏳ Generando PDF en S3...' : '📄 Descargar Comprobante Legal (PDF)' }}
+              {{ downloadingPdf ? 'Generando PDF...' : 'Descargar comprobante PDF' }}
             </button>
             <button @click="printLegalDocument" class="btn-ghost" title="Imprimir página">
-              🖨️ Imprimir
+              Imprimir
             </button>
           </div>
 
           <div v-if="auth.isAdmin || (auth.isOperator && !['RESUELTO', 'RECHAZADO', 'CERRADO', 'EVALUADO'].includes(reportData.status))" class="quick-manage-box">
-            <h3>🛠️ Gestión Rápida (Operador)</h3>
+            <h3>Gestión rápida</h3>
             <form @submit.prevent="saveManagement" class="manage-form">
               <div class="field">
-                <label for="track-manage-status">Cambiar Estado</label>
+                <label for="track-manage-status">Estado</label>
                 <select id="track-manage-status" name="status" v-model="manageForm.status" required>
                   <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
-                  <option value="ASIGNADO">ASIGNADO (Enviado a cuadrilla)</option>
-                  <option value="EN_PROGRESO">EN PROGRESO (Trabajando)</option>
-                  <option value="RESUELTO">RESUELTO (Finalizado)</option>
-                  <option v-if="auth.isAdmin" value="CERRADO">CERRADO (Archivado/Auditoria)</option>
-                  <option value="RECHAZADO">RECHAZADO (Falso/Duplicado)</option>
+                  <option value="ASIGNADO">ASIGNADO</option>
+                  <option value="EN_PROGRESO">EN PROGRESO</option>
+                  <option value="RESUELTO">RESUELTO</option>
+                  <option v-if="auth.isAdmin" value="CERRADO">CERRADO</option>
+                  <option value="RECHAZADO">RECHAZADO</option>
                 </select>
               </div>
 
               <div class="field" v-if="['EN_PROGRESO', 'RESUELTO', 'RECHAZADO'].includes(manageForm.status) && auth.isOperator">
-                <label>Evidencia fotográfica</label>
+                <label>Foto de respaldo</label>
                 <label for="evidence-track" class="upload-area">
-                  <span v-if="!manageForm.evidencePreview">📷 Subir foto de respaldo</span>
+                  <span v-if="!manageForm.evidencePreview">Subir foto de respaldo</span>
                   <img v-else :src="manageForm.evidencePreview" alt="preview" class="preview-img" />
                 </label>
                 <input id="evidence-track" type="file" accept="image/*" class="sr-only" @change="onEvidenceSelected" />
               </div>
 
               <button type="submit" class="btn-primary" :disabled="isUpdating">
-                {{ isUpdating ? 'Guardando...' : 'Actualizar Estado' }}
+                {{ isUpdating ? 'Guardando...' : 'Actualizar estado' }}
               </button>
             </form>
           </div>
         </div>
 
         <div class="timeline" v-if="reportHistory.length > 0">
-          <h3>Historial de actividad</h3>
+          <h3>Historial</h3>
           <div class="timeline-list">
             <div class="timeline-item" v-for="(event, i) in reportHistory" :key="i">
               <div class="timeline-dot" :style="{ backgroundColor: getStatusColor(event.new_status) }"></div>

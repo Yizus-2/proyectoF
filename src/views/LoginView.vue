@@ -52,23 +52,23 @@ async function handleLogin() {
           </svg>
         </div>
         <h2>ESSMAR</h2>
-        <p class="login-panel__subtitle">Sistema de Gestión de Reportes Ciudadanos</p>
+        <p class="login-panel__subtitle">Gestión de reportes ciudadanos</p>
         <div class="login-panel__features">
           <div class="login-panel__feature">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>Recepción y triage de reportes de daños</span>
+            <span>Clasificación y despacho a cuadrillas</span>
           </div>
           <div class="login-panel__feature">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>Monitoreo GIS en tiempo real</span>
+            <span>Mapa operativo por zonas</span>
           </div>
           <div class="login-panel__feature">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>Indicadores de rendimiento (KPIs)</span>
+            <span>Control de tiempos de atención</span>
           </div>
           <div class="login-panel__feature">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>Detección automática de reincidencia</span>
+            <span>Detección de daños recurrentes</span>
           </div>
         </div>
       </div>
@@ -77,9 +77,9 @@ async function handleLogin() {
     <!-- Right: Form -->
     <section class="login-form-area">
       <div class="login-card card animate-scale-in">
-        <h3>Panel Operativo</h3>
+        <h3>Iniciar sesión</h3>
         <p class="small" style="margin-bottom: 20px;">
-          Acceso exclusivo para operadores y administradores de ESSMAR.
+          Ingreso para operarios, supervisores y administradores.
         </p>
 
         <form @submit.prevent="handleLogin">

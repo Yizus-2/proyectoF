@@ -135,66 +135,62 @@ onUnmounted(() => {
     <!-- Encabezado Principal -->
     <header class="dashboard-header">
       <div class="header-content">
-        <h1 class="header-title">Centro de Control e Indicadores</h1>
-        <p class="header-subtitle">Monitoreo operativo y analítica en tiempo real – ESSMAR SIGVI</p>
+        <h1 class="header-title">Indicadores y Control</h1>
+        <p class="header-subtitle">Estado de reportes, tiempos SLA y operación en Santa Marta.</p>
       </div>
 
       <div class="export-actions" v-if="auth.isSupervisor">
         <button class="btn-primary" @click="exportExecutivePdf" :disabled="exportingPdf">
-          {{ exportingPdf ? '⏳ Generando PDF...' : '📄 Exportar Informe PDF (S3)' }}
+          {{ exportingPdf ? 'Generando PDF...' : 'Exportar PDF' }}
         </button>
         <button class="btn-ghost" @click="exportCsv" :disabled="exportingCsv">
-          {{ exportingCsv ? '⏳ Exportando...' : '📊 Exportar CSV' }}
+          {{ exportingCsv ? 'Exportando...' : 'Exportar CSV' }}
         </button>
       </div>
       
       <!-- Resumen de Alto Nivel (KPIs) -->
       <div class="kpi-banner" style="width: 100%; margin: 16px 0;">
         <div class="kpi-card glass-card kpi-clickable" @click="handleKpiClick('ALL')">
-          <div class="kpi-icon">📋</div>
           <div class="kpi-data">
             <h3>{{ kpis.total }}</h3>
-            <p>Total Reportes</p>
+            <p>Total reportes</p>
           </div>
         </div>
         <div class="kpi-card glass-card warning kpi-clickable" @click="handleKpiClick('PENDING')">
-          <div class="kpi-icon">⏳</div>
           <div class="kpi-data">
             <h3>{{ kpis.pending }}</h3>
             <p>Pendientes</p>
           </div>
         </div>
         <div class="kpi-card glass-card success kpi-clickable" @click="handleKpiClick('RESOLVED')">
-          <div class="kpi-icon">✅</div>
           <div class="kpi-data">
             <h3>{{ kpis.resolved }}</h3>
             <p>Resueltos</p>
           </div>
         </div>
         <div class="kpi-card glass-card danger kpi-clickable" @click="handleKpiClick('CRITICAL')">
-          <div class="kpi-icon">🚨</div>
           <div class="kpi-data">
             <h3>{{ kpis.critical }}</h3>
-            <p>Críticos Activos</p>
+            <p>Críticos activos</p>
           </div>
         </div>
       </div>
       
-      <!-- Sub-navegación de Pestañas (Premium Glass) -->
+      <!-- Sub-navegación de Pestañas -->
       <div class="navigation-tabs">
         <button
           class="tab-btn"
           :class="{ active: activeTab === 'analytics' }"
           @click="activeTab = 'analytics'"
         >
-          Analíticas y KPIs
+          Indicadores
         </button>
         <button
           class="tab-btn"
           :class="{ active: activeTab === 'operations' }"
           @click="activeTab = 'operations'"
         >
-          Gestión de Operaciones
+          Operaciones
         </button>
         <button
           v-if="auth.isSupervisor || auth.isAdmin"
@@ -202,7 +198,7 @@ onUnmounted(() => {
           :class="{ active: activeTab === 'verification' }"
           @click="activeTab = 'verification'"
         >
-          Verificación de Evidencias
+          Verificación
         </button>
       </div>
     </header>
@@ -252,8 +248,8 @@ onUnmounted(() => {
         <section class="glass-card docs-archive-card" v-if="archivedDocs.length > 0">
           <div class="card-header">
             <div class="header-titles">
-              <h3>🗄️ Repositorio de Documentos PDF (MinIO S3)</h3>
-              <p class="chart-subtitle">Comprobantes legales PQR e informes ejecutivos archivados con integridad SHA-256</p>
+              <h3>Documentos PDF archivados</h3>
+              <p class="chart-subtitle">Comprobantes PQR e informes guardados en S3 con verificación SHA-256.</p>
             </div>
           </div>
           <div class="table-wrapper">
@@ -262,7 +258,7 @@ onUnmounted(() => {
                 <tr>
                   <th>Tipo</th>
                   <th>Archivo</th>
-                  <th>Objeto S3</th>
+                  <th>Ruta S3</th>
                   <th>Tamaño</th>
                   <th>SHA-256</th>
                   <th>Acción</th>
@@ -272,7 +268,7 @@ onUnmounted(() => {
                 <tr v-for="doc in archivedDocs.slice(0, 10)" :key="doc.id">
                   <td>
                     <span class="badge-pill" :class="doc.doc_type === 'REPORTE_EJECUTIVO' ? 'bg-warn' : 'bg-success'">
-                      {{ doc.doc_type === 'REPORTE_EJECUTIVO' ? 'Ejecutivo' : 'PQR Legal' }}
+                      {{ doc.doc_type === 'REPORTE_EJECUTIVO' ? 'Ejecutivo' : 'PQR' }}
                     </span>
                   </td>
                   <td class="td-primary">{{ doc.file_name }}</td>
@@ -281,7 +277,7 @@ onUnmounted(() => {
                   <td style="font-family: var(--font-mono); font-size: 0.78rem;">{{ doc.sha256_hash.slice(0, 12) }}…</td>
                   <td>
                     <button class="btn-ghost" style="padding: 6px 12px; font-size: 0.8rem;" @click="downloadArchivedDoc(doc)">
-                      ⬇️ Descargar
+                      Descargar
                     </button>
                   </td>
                 </tr>

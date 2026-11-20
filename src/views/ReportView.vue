@@ -36,9 +36,9 @@ const categories = [
 ]
 
 const urgencyLevels = [
-  { value: 'BAJA', label: 'Regular', color: '#eab308', desc: 'Atención estándar' },
-  { value: 'ALTA', label: 'Urgente', color: '#f97316', desc: 'Requiere pronta atención' },
-  { value: 'CRITICA', label: 'Crítico', color: '#ef4444', desc: 'Peligro inmediato' }
+  { value: 'BAJA', label: 'Regular', color: '#eab308', desc: 'Sin riesgo inmediato' },
+  { value: 'ALTA', label: 'Urgente', color: '#f97316', desc: 'Afecta servicio o vía' },
+  { value: 'CRITICA', label: 'Crítico', color: '#ef4444', desc: 'Riesgo o daño mayor' }
 ]
 
 const form = ref({
@@ -312,32 +312,31 @@ function resetForm() {
     <div v-if="successData" class="rv__success">
       <div class="success-card">
         <div class="success-icon">✓</div>
-        <h2>¡Reporte Enviado!</h2>
-        <p>Tu reporte fue recibido exitosamente.</p>
+        <h2>Reporte radicado</h2>
+        <p>Tu solicitud quedó registrada.</p>
         <div class="tracking-box">
-          <span class="tracking-label">Código PQR Permanente</span>
+          <span class="tracking-label">Código PQR</span>
           <span class="tracking-code">{{ successData.tracking_code }}</span>
         </div>
         
         <div class="user-action-guide">
-          <h4>¿Qué puedes hacer ahora?</h4>
+          <h4>Qué sigue</h4>
           <ul>
-            <li><strong>Consultar estado:</strong> Usa este código PQR en la sección "Consultar Reporte" para ver actualizaciones en tiempo real y la cuadrilla asignada.</li>
-            <li><strong>Valor legal:</strong> Este número no caduca y sirve como comprobante ante cualquier entidad regulatoria.</li>
-            <li><strong>Asignación:</strong> El sistema está asignando automáticamente tu caso a la cuadrilla más óptima.</li>
+            <li><strong>Seguimiento:</strong> ingresa este código en "Consultar" para ver el estado y la cuadrilla asignada.</li>
+            <li><strong>Respaldo:</strong> este radicado no vence y permite descargar el comprobante PDF.</li>
+            <li v-if="successData.work_order"><strong>Cuadrilla asignada:</strong> {{ successData.work_order }}.</li>
           </ul>
         </div>
 
-        <button class="btn-main mt-4" @click="resetForm">Enviar otro reporte</button>
+        <button class="btn-main mt-4" @click="resetForm">Nuevo reporte</button>
       </div>
     </div>
 
     <!-- Form -->
     <div v-else class="rv__container">
       <header class="rv__header">
-        <div class="header-icon">📢</div>
-        <h1>Centro de Reportes Ciudadanos</h1>
-        <p>Tu participación es vital para mantener la infraestructura de Santa Marta en óptimas condiciones.</p>
+        <h1>Reportar un daño</h1>
+        <p>Completa estos tres pasos para registrar el incidente en Santa Marta.</p>
       </header>
 
       <!-- Progress -->
@@ -355,18 +354,18 @@ function resetForm() {
       <form @submit.prevent="submitReport" @keydown.enter.prevent class="rv__form">
         <!-- STEP 1: Location -->
         <section v-show="step === 1" class="form-step">
-          <h2 class="step-title">¿Dónde está el problema?</h2>
+          <h2 class="step-title">Ubicación del daño</h2>
           
           <div class="field search-field">
-            <label for="addr">Buscar Dirección o Barrio</label>
+            <label for="addr">Dirección o barrio</label>
             <div class="search-input-group">
               <input id="addr" v-model="form.address" type="text" placeholder="Ej: Calle 12 #3-45, Centro" @keyup.enter="searchOnMap" />
               <button type="button" class="btn-search" @click="searchOnMap" :disabled="isSearchingMap || !form.address">
-                <span v-if="isSearchingMap">⏳</span>
-                <span v-else>🔍 Buscar</span>
+                <span v-if="isSearchingMap">Buscando...</span>
+                <span v-else>Buscar</span>
               </button>
             </div>
-            <small class="hint">Escribe aquí y presiona Buscar para centrar el mapa automáticamente</small>
+            <small class="hint">Busca una dirección o marca el punto directamente en el mapa.</small>
           </div>
 
           <div class="map-wrap">
@@ -374,24 +373,24 @@ function resetForm() {
             <button type="button" class="locate-btn" @click="useMyLocation" title="Usar mi ubicación">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
             </button>
-            <div v-if="!locationObtained" class="map-hint">Toca el mapa o usa el botón de ubicación</div>
+            <div v-if="!locationObtained" class="map-hint">Marca el punto en el mapa o usa tu ubicación</div>
           </div>
           <div class="field" v-if="locationObtained">
-            <label for="sector">Sector / Barrio</label>
-            <input id="sector" v-model="form.sector" type="text" placeholder="Ej: Pescaito, El Rodadero, etc." />
+            <label for="sector">Barrio o sector</label>
+            <input id="sector" v-model="form.sector" type="text" placeholder="Ej: Pescaíto, El Rodadero" />
           </div>
           <div class="field" v-if="form.lat && form.lng">
-            <label for="gps-coords">Coordenadas GPS (Alta Precisión)</label>
+            <label for="gps-coords">Coordenadas</label>
             <input id="gps-coords" name="gpsCoords" type="text" :value="`${form.lat.toFixed(6)}, ${form.lng.toFixed(6)}`" readonly class="readonly-input" />
           </div>
           <div class="field">
-            <label for="zone">Zona / Sector</label>
+            <label for="zone">Zona</label>
             <select id="zone" v-model="form.zone_id">
-              <option :value="null">— Seleccionar zona —</option>
+              <option :value="null">Selecciona una zona</option>
               <option v-for="z in zones" :key="z.id" :value="z.id">{{ z.name }}</option>
             </select>
             <div v-if="suggestedZoneName" class="suggested-zone-badge">
-              ✨ Zona sugerida por ubicación: <strong>{{ suggestedZoneName }}</strong>
+              Zona sugerida: <strong>{{ suggestedZoneName }}</strong>
             </div>
           </div>
           <div class="step-nav">
@@ -402,7 +401,7 @@ function resetForm() {
 
         <!-- STEP 2: Details -->
         <section v-show="step === 2" class="form-step">
-          <h2 class="step-title">¿Qué tipo de daño es?</h2>
+          <h2 class="step-title">Tipo de daño y evidencia</h2>
           <div class="cat-grid">
             <button v-for="cat in categories" :key="cat.value" type="button" class="cat-card" :class="{ selected: form.category === cat.value }" @click="form.category = cat.value">
               <span class="cat-icon">{{ cat.icon }}</span>
@@ -410,7 +409,7 @@ function resetForm() {
             </button>
           </div>
 
-          <h3 class="sub-title">¿Qué tan urgente es?</h3>
+          <h3 class="sub-title">Nivel de urgencia</h3>
           <div class="urgency-row">
             <button v-for="u in urgencyLevels" :key="u.value" type="button" class="urgency-btn" :class="{ selected: form.priority === u.value }" :style="form.priority === u.value ? { borderColor: u.color, background: u.color + '18' } : {}" @click="form.priority = u.value">
               <span class="urgency-dot" :style="{ background: u.color }"></span>
@@ -422,21 +421,21 @@ function resetForm() {
           </div>
 
           <div class="field">
-            <label for="photo">Foto de evidencia <span style="color: var(--danger);">*</span> <small style="font-weight: 500; color: var(--muted);">(obligatoria)</small></label>
+            <label for="photo">Foto del daño <span style="color: var(--danger);">*</span></label>
             <label for="photo" class="upload-area">
-              <span v-if="!photoPreviewUrl">📷 Tomar o elegir foto (obligatorio para continuar)</span>
+              <span v-if="!photoPreviewUrl">Tomar o elegir foto (obligatoria)</span>
               <img v-else :src="photoPreviewUrl" alt="preview" class="preview-img" />
             </label>
             <input id="photo" name="photo" type="file" accept="image/*" capture="environment" class="sr-only" @change="onPhotoSelected" />
           </div>
 
           <div class="field">
-            <label for="desc">Descripción adicional <span style="color: var(--danger);">*</span></label>
-            <textarea id="desc" name="description" v-model="form.description" placeholder="Detalles que ayuden al técnico (mínimo 4 caracteres)..." rows="3"></textarea>
+            <label for="desc">Descripción <span style="color: var(--danger);">*</span></label>
+            <textarea id="desc" name="description" v-model="form.description" placeholder="Describe brevemente el problema y un punto de referencia..." rows="3"></textarea>
           </div>
 
           <small v-if="!canProceedStep2" class="hint" style="color: var(--warning); font-weight: 600;">
-            Para continuar debes adjuntar una foto de evidencia y escribir una breve descripción.
+            Adjunta una foto y una breve descripción para continuar.
           </small>
 
           <div class="step-nav">
@@ -447,21 +446,21 @@ function resetForm() {
 
         <!-- STEP 3: Contact -->
         <section v-show="step === 3" class="form-step">
-          <h2 class="step-title">¿Cómo te contactamos? <small>(opcional)</small></h2>
-          <p class="step-desc">Si deseas recibir actualizaciones sobre tu reporte, déjanos tus datos.</p>
+          <h2 class="step-title">Datos de contacto <small>(opcional)</small></h2>
+          <p class="step-desc">Solo para enviarte avisos sobre este reporte.</p>
           <div class="fields-row">
-            <div class="field"><label for="name">Nombre (Solo texto)</label><input id="name" name="reporter_name" v-model="form.reporter_name" type="text" autocomplete="name" pattern="[A-Za-zñÑáéíóúÁÉÍÓÚ ]+" title="Solo se permiten letras" placeholder="Tu nombre" /></div>
-            <div class="field"><label for="phone">Teléfono (Solo números)</label><input id="phone" name="reporter_phone" v-model="form.reporter_phone" type="tel" autocomplete="tel" pattern="[0-9]+" title="Solo se permiten números" placeholder="3001234567" /></div>
+            <div class="field"><label for="name">Nombre</label><input id="name" name="reporter_name" v-model="form.reporter_name" type="text" autocomplete="name" pattern="[A-Za-zñÑáéíóúÁÉÍÓÚ ]+" title="Solo se permiten letras" placeholder="Tu nombre" /></div>
+            <div class="field"><label for="phone">Teléfono</label><input id="phone" name="reporter_phone" v-model="form.reporter_phone" type="tel" autocomplete="tel" pattern="[0-9]+" title="Solo se permiten números" placeholder="3001234567" /></div>
           </div>
           <div class="field" style="margin-top: 14px;">
             <label for="email">Correo electrónico</label>
-            <input id="email" name="reporter_email" v-model="form.reporter_email" type="email" autocomplete="email" placeholder="Para recibir la encuesta de satisfacción" />
+            <input id="email" name="reporter_email" v-model="form.reporter_email" type="email" autocomplete="email" placeholder="correo@ejemplo.com" />
           </div>
           <div class="step-nav" style="margin-top: 20px;">
             <button type="button" class="btn-ghost" @click="prevStep">← Atrás</button>
             <button type="submit" class="btn-submit" :disabled="loading">
               <span v-if="loading" class="spinner"></span>
-              <span v-else>Enviar Reporte</span>
+              <span v-else>Enviar reporte</span>
             </button>
           </div>
         </section>

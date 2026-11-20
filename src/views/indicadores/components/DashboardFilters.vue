@@ -8,60 +8,60 @@ const reportsStore = useReportsStore()
 
 const periodos = [
   { label: 'Hoy', value: 'hoy' },
-  { label: 'Últimos 7 Días', value: '7dias' },
-  { label: 'Últimos 30 Días', value: '30dias' },
-  { label: 'Histórico', value: 'todos' }
+  { label: 'Últimos 7 días', value: '7dias' },
+  { label: 'Últimos 30 días', value: '30dias' },
+  { label: 'Todo', value: 'todos' }
 ]
 
 const categorias = [
-  { label: '🌊 Todas las Categorías', value: 'todos' },
-  { label: '💧 Fugas de Agua', value: 'fuga_agua' },
-  { label: '🚰 Alcantarillado', value: 'fuga_alcantarillado' },
-  { label: '🔧 Tubería Rota', value: 'tuberia_rota' },
-  { label: '🛣️ Daño Vial / Pavimento', value: 'dano_pavimento' },
-  { label: '🏗️ Infraestructura', value: 'dano_infraestructura' },
-  { label: '📋 Otros', value: 'otro' }
+  { label: 'Todas las categorías', value: 'todos' },
+  { label: 'Fugas de agua', value: 'fuga_agua' },
+  { label: 'Alcantarillado', value: 'fuga_alcantarillado' },
+  { label: 'Tubería rota', value: 'tuberia_rota' },
+  { label: 'Daño vial', value: 'dano_pavimento' },
+  { label: 'Infraestructura', value: 'dano_infraestructura' },
+  { label: 'Otros', value: 'otro' }
 ]
 
 const zonas = computed(() => [
-  { label: '🌍 Todas las Zonas', value: 'todas' as const },
+  { label: 'Todas las zonas', value: 'todas' as const },
   ...reportsStore.zones.map((z) => ({ label: z.name, value: z.id }))
 ])
 
 const riesgos = [
-  { label: 'Todos los niveles', value: 'todos' },
-  { label: '🔴 Crítico (< 30 min)', value: 'CRITICA' },
-  { label: '🟠 Alto (< 2h)', value: 'ALTA' },
-  { label: '🟡 Medio (< 8h)', value: 'MEDIA' },
-  { label: '🟢 Regular / Bajo (< 24h)', value: 'BAJA' }
+  { label: 'Todas', value: 'todos' },
+  { label: 'Crítico (< 30 min)', value: 'CRITICA' },
+  { label: 'Alto (< 2 h)', value: 'ALTA' },
+  { label: 'Medio (< 8 h)', value: 'MEDIA' },
+  { label: 'Regular (< 24 h)', value: 'BAJA' }
 ]
 </script>
 
 <template>
   <div class="filters-glass-bar">
     <div class="filter-group focus-highlight">
-      <label for="categoria">Categoría de Análisis:</label>
+      <label for="categoria">Categoría</label>
       <select id="categoria" v-model="store.filtros.categoria" class="primary-select">
         <option v-for="c in categorias" :key="c.value" :value="c.value">{{ c.label }}</option>
       </select>
     </div>
     
     <div class="filter-group">
-      <label for="periodo">Período:</label>
+      <label for="periodo">Período</label>
       <select id="periodo" v-model="store.filtros.periodo">
         <option v-for="p in periodos" :key="p.value" :value="p.value">{{ p.label }}</option>
       </select>
     </div>
 
     <div class="filter-group">
-      <label for="zona">Sector/Zona:</label>
+      <label for="zona">Zona</label>
       <select id="zona" v-model="store.filtros.zona">
         <option v-for="z in zonas" :key="z.value" :value="z.value">{{ z.label }}</option>
       </select>
     </div>
 
     <div class="filter-group">
-      <label for="riesgo">Urgencia:</label>
+      <label for="riesgo">Urgencia</label>
       <select id="riesgo" v-model="store.filtros.nivelRiesgo">
         <option v-for="r in riesgos" :key="r.value" :value="r.value">{{ r.label }}</option>
       </select>

@@ -14,11 +14,11 @@ const niveles = [
 
 <template>
   <div class="risk-scale-legend">
-    <h4 class="legend-title">Escala de Urgencia ({{ contexto }})</h4>
+    <h4 class="legend-title">Tiempos de respuesta — {{ contexto }}</h4>
     <div class="legend-grid">
       <div class="legend-header">Nivel</div>
-      <div class="legend-header">Tiempo Máximo</div>
-      <div class="legend-header">Acción Operativa</div>
+      <div class="legend-header">Plazo máximo</div>
+      <div class="legend-header">Acción</div>
       
       <template v-for="n in niveles" :key="n.nivel">
         <div class="legend-cell flex-center gap-2">

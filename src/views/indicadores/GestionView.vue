@@ -289,17 +289,17 @@ function getSlaStatus(report: Report) {
   <div class="management-section">
     <header class="section-header">
       <div>
-        <h2 class="section-title">🔄 Gestión de Operaciones</h2>
-        <p class="section-subtitle">Panel operativo para la administración, asignación y resolución de reportes de daños.</p>
+        <h2 class="section-title">Operaciones</h2>
+        <p class="section-subtitle">Despacho de cuadrillas y seguimiento de casos.</p>
       </div>
       
       <div class="filter-group">
         <label for="gestion-date-filter" class="sr-only">Filtrar por fecha</label>
         <select id="gestion-date-filter" name="filterDate" v-model="reportsStore.filterDate" class="filter-btn filter-select">
-          <option value="ALL">🗓️ Histórico Total</option>
-          <option value="TODAY">📍 Solo Hoy</option>
-          <option value="WEEK">📅 Esta Semana</option>
-          <option value="MONTH">📊 Este Mes</option>
+          <option value="ALL">Todo el historial</option>
+          <option value="TODAY">Solo hoy</option>
+          <option value="WEEK">Esta semana</option>
+          <option value="MONTH">Este mes</option>
         </select>
         <div class="filter-tabs">
           <button class="filter-btn" :class="{ active: filterStatus === 'ACTIVOS' }" @click="filterStatus = 'ACTIVOS'">Activos</button>
@@ -359,8 +359,8 @@ function getSlaStatus(report: Report) {
             
             <div class="list-col col-id">
               <span class="tracking-code">{{ report.tracking_code || `#${report.id}` }}</span>
-              <span v-if="report.id === primerIncidenteHoyId" class="badge badge--first">🌟 1er Incidente de Hoy</span>
-              <span v-if="report.is_recurrent" class="badge badge--outline">REINCIDENTE</span>
+              <span v-if="report.id === primerIncidenteHoyId" class="badge badge--first">Primero de hoy</span>
+              <span v-if="report.is_recurrent" class="badge badge--outline">Reincidente</span>
             </div>
             
             <div class="list-col col-address">
@@ -412,37 +412,37 @@ function getSlaStatus(report: Report) {
         <button type="button" class="modal-close-btn" aria-label="Cerrar modal" @click="closeModal">✕</button>
         <!-- Formulario regular o Formulario de Evidencia -->
         <div v-if="!showEvidenceForm">
-          <h2>Gestionar Reporte</h2>
-          <p class="modal-subtitle">{{ selectedReport?.tracking_code }} - {{ selectedReport?.address }}</p>
+          <h2>Gestionar caso</h2>
+          <p class="modal-subtitle">{{ selectedReport?.tracking_code }} — {{ selectedReport?.address }}</p>
           
           <form @submit.prevent="saveManagement" class="modal-form">
             <!-- Selección de Estado (Solo Admin/Supervisor) -->
             <div class="field" v-if="auth.isAdmin || auth.isSupervisor">
-              <label for="manage-status">Estado actual</label>
+              <label for="manage-status">Estado</label>
               <select id="manage-status" name="status" v-model="manageForm.status" required>
                 <option value="REPORTADO" disabled>REPORTADO (Nuevo)</option>
                 <option v-if="auth.isAdmin" value="CLASIFICADO">CLASIFICADO</option>
                 <option v-if="auth.isAdmin" value="ASIGNADO">ASIGNADO (Despachar cuadrilla)</option>
                 
-                <option value="EN_PROGRESO" disabled>EN PROGRESO (Requiere foto operario)</option>
+                <option value="EN_PROGRESO" disabled>EN PROGRESO (Requiere foto)</option>
                 <option value="EVIDENCIA_PENDIENTE" disabled>EVIDENCIA PENDIENTE</option>
                 <option value="VERIFICACION_SUPERVISOR" disabled>VERIFICACIÓN SUPERVISOR</option>
-                <option value="RESUELTO" disabled>RESUELTO (Requiere foto operario)</option>
+                <option value="RESUELTO" disabled>RESUELTO (Requiere foto)</option>
                 
-                <option v-if="auth.isSupervisor" value="CERRADO">CERRADO (Archivado)</option>
-                <option v-if="auth.isAdmin" value="RECHAZADO">RECHAZADO (Inválido/Duplicado)</option>
-                <option value="EVALUADO" disabled>EVALUADO (Solo ciudadano)</option>
+                <option v-if="auth.isSupervisor" value="CERRADO">CERRADO</option>
+                <option v-if="auth.isAdmin" value="RECHAZADO">RECHAZADO</option>
+                <option value="EVALUADO" disabled>EVALUADO (Ciudadano)</option>
               </select>
             </div>
 
             <!-- Asignación de Cuadrilla (Admin) -->
             <div class="field" v-if="auth.isAdmin">
-              <label for="manage-crew">Cuadrilla Asignada</label>
+              <label for="manage-crew">Cuadrilla</label>
               <div class="input-action-row">
                 <select id="manage-crew" name="work_order" v-model="manageForm.work_order">
-                  <option value="">— Auto-asignar según zona —</option>
+                  <option value="">Sin cuadrilla asignada</option>
                   <option v-for="c in cuadrillas" :key="c.id" :value="c.name">
-                    {{ c.name }} (Carga: {{ c.workload }}/3)
+                    {{ c.name }} ({{ c.workload }}/3)
                   </option>
                 </select>
                 <button
@@ -450,31 +450,31 @@ function getSlaStatus(report: Report) {
                   class="btn-auto-assign"
                   :disabled="isAssigning"
                   @click="triggerAutoAssignment"
-                  title="Asignar automáticamente la cuadrilla más óptima"
+                  title="Asignar la cuadrilla disponible más cercana"
                 >
-                  🤖 Auto
+                  Auto-asignar
                 </button>
               </div>
-              <small>Puedes seleccionar manualmente o usar la asignación inteligente.</small>
+              <small>Elige una cuadrilla o usa la asignación automática por zona.</small>
             </div>
             
             <!-- Vista de solo lectura para el operario -->
             <div class="field" v-else-if="manageForm.work_order">
-              <label for="manage-crew-readonly">Cuadrilla Asignada</label>
+              <label for="manage-crew-readonly">Cuadrilla</label>
               <input id="manage-crew-readonly" name="work_order_readonly" type="text" :value="manageForm.work_order" disabled style="background: var(--bg-body);" />
             </div>
 
             <!-- Subir Evidencia (SOLO Operario) -->
             <div class="field-evidence-trigger" v-if="!auth.isAdmin && ['ASIGNADO', 'EN_PROGRESO'].includes(selectedReport?.status || '')">
               <p class="evidence-info-text" v-if="selectedReport?.status === 'ASIGNADO'">
-                Debes registrar tu llegada al sitio con una foto para pasar el estado a "En Progreso".
+                Sube una foto al llegar al sitio para pasar el caso a "En progreso".
               </p>
               <p class="evidence-info-text" v-else>
-                Registra la evidencia final del trabajo completado para pasar a validación.
+                Sube la foto del trabajo terminado para revisión del supervisor.
               </p>
               <button type="button" class="btn-primary" @click="showEvidenceForm = true">
-                <span v-if="selectedReport?.status === 'ASIGNADO'">📍 Registrar Llegada (Iniciar)</span>
-                <span v-else>📷 Registrar Evidencia Final</span>
+                <span v-if="selectedReport?.status === 'ASIGNADO'">Registrar llegada</span>
+                <span v-else>Subir evidencia final</span>
               </button>
             </div>
 

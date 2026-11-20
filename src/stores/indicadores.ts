@@ -26,72 +26,72 @@ export const useIndicadoresStore = defineStore('indicadores', () => {
   const kpis = ref<KpiConfig[]>([
     {
       id: 'activos',
-      pregunta: '¿Cuántos reportes tenemos activos?',
-      contexto: 'Reportes pendientes de resolución por las cuadrillas',
+      pregunta: 'Reportes activos',
+      contexto: 'Casos abiertos pendientes de cierre.',
       icono: 'Activity',
       unidad: 'reportes',
       color: 'blue',
       componenteChart: 'Ninguno',
       afectadoPorCategoria: true,
       accionSugerida: {
-        bueno: 'Carga de trabajo bajo control',
-        malo: 'Asignar más cuadrillas o redistribuir carga'
+        bueno: 'Carga controlada',
+        malo: 'Redistribuir cuadrillas disponibles'
       }
     },
     {
       id: 'urgencia',
-      pregunta: '¿Cuántos reportes urgentes tenemos activos?',
-      contexto: 'Reportes activos clasificados por nivel de criticidad',
+      pregunta: 'Activos por urgencia',
+      contexto: 'Casos abiertos clasificados por prioridad.',
       icono: 'AlertTriangle',
       unidad: 'reportes',
       color: 'orange',
       componenteChart: 'ReportsByUrgencyChart',
       afectadoPorCategoria: true,
       accionSugerida: {
-        bueno: 'Distribución equilibrada, sin cuellos de botella',
-        malo: 'Concentrar cuadrillas en reportes críticos y altos'
+        bueno: 'Carga equilibrada',
+        malo: 'Priorizar cuadrillas en casos críticos y altos'
       }
     },
     {
       id: 'sla',
-      pregunta: '¿Se atendieron los reportes a tiempo?',
-      contexto: 'Porcentaje resuelto dentro del tiempo máximo según su riesgo',
+      pregunta: 'Cumplimiento de tiempos (SLA)',
+      contexto: 'Porcentaje resuelto dentro del plazo fijado.',
       icono: 'Clock',
       unidad: '%',
       color: 'emerald',
       componenteChart: 'SlaComplianceChart',
       afectadoPorCategoria: true,
       accionSugerida: {
-        bueno: 'Cumplimiento óptimo, mantener ritmo',
-        malo: 'Revisar asignación de cuadrillas y tiempos de traslado'
+        bueno: 'Dentro del objetivo',
+        malo: 'Revisar tiempos de despacho y traslado'
       }
     },
     {
       id: 'trend',
-      pregunta: '¿Estamos recibiendo más o menos reportes?',
-      contexto: 'Volumen diario de nuevos incidentes',
+      pregunta: 'Reportes por día',
+      contexto: 'Volumen diario en los últimos 7 días.',
       icono: 'TrendingUp',
       unidad: 'reportes/día',
       color: 'purple',
       componenteChart: 'WeeklyTrendChart',
       afectadoPorCategoria: true,
       accionSugerida: {
-        bueno: 'Estabilidad en la red, mantener rutina',
-        malo: 'Preparar cuadrillas de contingencia'
+        bueno: 'Comportamiento estable',
+        malo: 'Alistar cuadrillas de apoyo'
       }
     },
     {
       id: 'channels',
-      pregunta: '¿Por dónde nos están reportando?',
-      contexto: 'Distribución por canal de atención ciudadano',
+      pregunta: 'Canales de ingreso',
+      contexto: 'Medio usado para radicar cada reporte.',
       icono: 'MessageSquare',
       unidad: 'reportes',
       color: 'sky',
       componenteChart: 'ChannelsChart',
       afectadoPorCategoria: true,
       accionSugerida: {
-        bueno: 'Uso correcto de canales oficiales',
-        malo: 'Mejorar adopción de la App Móvil o web'
+        bueno: 'Distribución normal de canales',
+        malo: 'Promover el reporte desde el portal web'
       }
     }
   ])

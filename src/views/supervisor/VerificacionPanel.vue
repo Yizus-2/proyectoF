@@ -98,21 +98,21 @@ onMounted(() => {
   <div class="verificacion-panel">
     <header class="panel-header">
       <div class="panel-header-content">
-        <h2 class="panel-title">✅ Panel de Verificación de Trabajos</h2>
-        <p class="panel-subtitle">Área reservada para supervisores y administradores para auditoría de evidencias en calle.</p>
+        <h2 class="panel-title">Verificación de evidencias</h2>
+        <p class="panel-subtitle">Revisa las fotos de campo antes de cerrar cada reporte.</p>
       </div>
       <button class="btn-reload" @click="reportsStore.fetchReports()" :disabled="loading">
-        🔄 Sincronizar
+        Actualizar
       </button>
     </header>
 
     <div v-if="!auth.isSupervisor && !auth.isAdmin" class="alert alert--danger">
-      ⚠️ Acceso Denegado: No cuentas con el rol de Supervisor o Administrador para estar en este módulo.
+      Acceso restringido a supervisores y administradores.
     </div>
 
     <div v-else-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <p>Cargando reportes pendientes de verificación...</p>
+      <p>Cargando casos pendientes...</p>
     </div>
 
     <div v-else-if="errorMessage" class="alert alert--danger">
@@ -120,9 +120,8 @@ onMounted(() => {
     </div>
 
     <div v-else-if="pendingReports.length === 0" class="empty-state">
-      <div class="empty-icon">🎉</div>
-      <h3>Todo al día</h3>
-      <p>No hay reportes en espera de verificación.</p>
+      <h3>Sin pendientes</h3>
+      <p>No hay evidencias esperando revisión.</p>
     </div>
 
     <div v-else class="verifications-grid">
@@ -142,12 +141,12 @@ onMounted(() => {
 
         <!-- Tarjeta: Evidencia del Operario -->
         <div class="card-section evidence-meta" v-if="report.evidences && report.evidences.length > 0">
-          <h5 class="section-title">📸 Evidencias Recibidas ({{ report.evidences.length }})</h5>
+          <h5 class="section-title">Evidencias ({{ report.evidences.length }})</h5>
           <div class="evidence-gallery">
             <div v-for="(ev, index) in report.evidences" :key="ev.id" class="evidence-card">
               <div class="evidence-header">
-                <span class="evidence-tag">{{ index === 0 ? '📍 Llegada' : (index === report.evidences.length - 1 ? '✅ Finalización' : '📸 Intermedio') }}</span>
-                <span class="evidence-time">⏱️ {{ ev.hours_spent }}h</span>
+                <span class="evidence-tag">{{ index === 0 ? 'Llegada' : (index === report.evidences.length - 1 ? 'Cierre' : 'Avance') }}</span>
+                <span class="evidence-time">{{ ev.hours_spent }} h</span>
               </div>
               <div class="image-wrapper">
                 <img :src="ev.evidence_url" alt="Foto de evidencia" class="evidence-img" />
@@ -162,18 +161,18 @@ onMounted(() => {
           </div>
         </div>
         <div class="card-section evidence-meta no-evidence" v-else>
-          <p>⚠️ No se encontró registro de evidencia en la base de datos.</p>
+          <p>No hay evidencias registradas para este caso.</p>
         </div>
 
         <!-- Acciones del Supervisor -->
         <div class="card-section action-area">
           <div class="comment-group">
-            <label :for="'comment-' + report.id" class="comment-label">Comentarios / Observaciones de Verificación *</label>
+            <label :for="'comment-' + report.id" class="comment-label">Observación *</label>
             <textarea
               :id="'comment-' + report.id"
               v-model="verificationComments[report.id]"
               rows="2"
-              placeholder="Escribe comentarios de auditoría aquí..."
+              placeholder="Nota de revisión..."
               required
             ></textarea>
           </div>
@@ -184,21 +183,21 @@ onMounted(() => {
               :disabled="isSubmitting[report.id]"
               @click="verify(report.id, 'RECHAZADO')"
             >
-              ❌ Rechazar
+              Rechazar
             </button>
             <button
               class="btn-action resubmit"
               :disabled="isSubmitting[report.id]"
               @click="verify(report.id, 'REGLAMENTO_PENDIENTE')"
             >
-              🔄 Solicitar Reenvío
+              Pedir reenvío
             </button>
             <button
               class="btn-action approve"
               :disabled="isSubmitting[report.id]"
               @click="verify(report.id, 'APROBADO')"
             >
-              ✅ Aprobar y Resolver
+              Aprobar y cerrar
             </button>
           </div>
         </div>
