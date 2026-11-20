@@ -205,6 +205,25 @@ CREATE INDEX IF NOT EXISTS idx_documents_type     ON public.documents(doc_type);
 CREATE INDEX IF NOT EXISTS idx_documents_created  ON public.documents(created_at DESC);
 
 -- ─────────────────────────────────────────────
+-- 8c. BITÁCORA DE NOTIFICACIONES (CORREO SMTP)
+-- ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.notification_logs (
+  id            BIGSERIAL PRIMARY KEY,
+  report_id     BIGINT REFERENCES public.reports(id) ON DELETE CASCADE,
+  channel       TEXT NOT NULL DEFAULT 'EMAIL' CHECK (channel IN ('EMAIL', 'WHATSAPP')),
+  event_type    TEXT NOT NULL,
+  recipient     TEXT NOT NULL,
+  subject       TEXT,
+  status        TEXT NOT NULL CHECK (status IN ('ENVIADO', 'ERROR', 'OMITIDO')),
+  provider_id   TEXT,
+  error_message TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_report  ON public.notification_logs(report_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON public.notification_logs(created_at DESC);
+
+-- ─────────────────────────────────────────────
 -- 9. FUNCIONES Y TRIGGERS (SIN RACE CONDITIONS NI DOBLE CONTEO)
 -- ─────────────────────────────────────────────
 

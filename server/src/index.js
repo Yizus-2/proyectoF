@@ -22,6 +22,7 @@ import {
   uploadBufferToS3
 } from './storage.js'
 import { generateExecutiveReportPdf, generatePqrReceiptPdf } from './pdf.js'
+import { checkSmtpHealth, sendReportNotification } from './mailer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
@@ -217,6 +218,83 @@ function buildFilteredReportsQuery({ periodo, categoria, zona, nivelRiesgo }) {
   }
 }
 
+async function createAndArchivePqrPdf(report, actorId = null) {
+  const { rows: history } = await pool.query(
+    `SELECT previous_status, new_status, notes, created_at
+     FROM public.report_history
+     WHERE report_id = $1
+     ORDER BY created_at DESC`,
+    [report.id]
+  )
+
+  const [photoBuffer, evidenceBuffer] = await Promise.all([
+    readAssetBuffer(report.photo_path),
+    readAssetBuffer(report.evidence_path)
+  ])
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const fileName = `Comprobante-${report.tracking_code}.pdf`
+  const s3Key = `pdfs/pqr/${report.tracking_code}-${timestamp}.pdf`
+
+  const pdfBuffer = await generatePqrReceiptPdf({
+    report,
+    history,
+    photoBuffer,
+    evidenceBuffer,
+    s3Key
+  })
+
+  const uploaded = await uploadBufferToS3({
+    key: s3Key,
+    body: pdfBuffer,
+    contentType: 'application/pdf',
+    metadata: {
+      doc_type: 'COMPROBANTE_PQR',
+      tracking_code: report.tracking_code
+    }
+  })
+
+  const { rows: docRows } = await pool.query(
+    `INSERT INTO public.documents (
+      report_id, doc_type, s3_bucket, s3_key, file_name, mime_type, size_bytes, sha256_hash, generated_by
+    ) VALUES ($1, 'COMPROBANTE_PQR', $2, $3, $4, 'application/pdf', $5, $6, $7)
+    RETURNING *`,
+    [report.id, uploaded.bucket, uploaded.key, fileName, uploaded.size, uploaded.sha256, actorId]
+  )
+
+  return { pdfBuffer, uploaded, savedDoc: docRows[0], fileName }
+}
+
+function dispatchEmailAsync(reportId, eventType, { notes = null, actorId = null } = {}) {
+  setImmediate(async () => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT r.*, z.name AS zone_name
+         FROM public.reports r
+         LEFT JOIN public.zones z ON z.id = r.zone_id
+         WHERE r.id = $1`,
+        [reportId]
+      )
+      const report = rows[0]
+      if (!report || !report.reporter_email) return
+
+      let pdfAttachment = null
+      if (report.status === 'CERRADO') {
+        const archived = await createAndArchivePqrPdf(report, actorId)
+        pdfAttachment = {
+          buffer: archived.pdfBuffer,
+          fileName: archived.fileName,
+          sha256: archived.uploaded.sha256
+        }
+      }
+
+      await sendReportNotification({ report, eventType, notes, pdfAttachment })
+    } catch (err) {
+      console.error(`Error en notificación async (${eventType}) para reporte #${reportId}:`, err.message)
+    }
+  })
+}
+
 const app = express()
 app.disable('x-powered-by')
 
@@ -243,16 +321,21 @@ if (fs.existsSync(LEGACY_UPLOADS_DIR)) {
 }
 
 // ─────────────────────────────────────────────
-// HEALTHCHECK (Postgres + MinIO S3)
+// HEALTHCHECK (Postgres + MinIO S3 + SMTP)
 // ─────────────────────────────────────────────
 app.get('/api/health', async (_req, res) => {
   try {
-    await Promise.all([pool.query('SELECT 1'), checkS3Health()])
+    const [, , smtp] = await Promise.all([
+      pool.query('SELECT 1'),
+      checkS3Health(),
+      checkSmtpHealth().catch(() => null)
+    ])
     res.json({
       status: 'ok',
       database: 'postgresql',
       storage: 's3-minio',
       bucket: S3_BUCKET,
+      mail: smtp ? `smtp (${smtp.host}:${smtp.port})` : 'unavailable',
       timestamp: new Date().toISOString()
     })
   } catch (err) {
@@ -422,6 +505,7 @@ app.post('/api/reports', reportRateLimiter, optionalAuth, uploadImage.single('ph
       priority: created.priority,
       status: created.status
     })
+    dispatchEmailAsync(created.id, 'REPORT_CREATED', { actorId: req.user?.id || null })
 
     res.status(201).json({
       id: created.id,
@@ -500,50 +584,7 @@ app.get('/api/reports/track/:code/pdf', optionalAuth, async (req, res) => {
       return res.status(404).json({ error: 'Reporte no encontrado.' })
     }
 
-    const { rows: history } = await pool.query(
-      `SELECT previous_status, new_status, notes, created_at
-       FROM public.report_history
-       WHERE report_id = $1
-       ORDER BY created_at DESC`,
-      [report.id]
-    )
-
-    const [photoBuffer, evidenceBuffer] = await Promise.all([
-      readAssetBuffer(report.photo_path),
-      readAssetBuffer(report.evidence_path)
-    ])
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const fileName = `Comprobante-${report.tracking_code}.pdf`
-    const s3Key = `pdfs/pqr/${report.tracking_code}-${timestamp}.pdf`
-
-    const pdfBuffer = await generatePqrReceiptPdf({
-      report,
-      history,
-      photoBuffer,
-      evidenceBuffer,
-      s3Key
-    })
-
-    const uploaded = await uploadBufferToS3({
-      key: s3Key,
-      body: pdfBuffer,
-      contentType: 'application/pdf',
-      metadata: {
-        doc_type: 'COMPROBANTE_PQR',
-        tracking_code: report.tracking_code
-      }
-    })
-
-    const { rows: docRows } = await pool.query(
-      `INSERT INTO public.documents (
-        report_id, doc_type, s3_bucket, s3_key, file_name, mime_type, size_bytes, sha256_hash, generated_by
-      ) VALUES ($1, 'COMPROBANTE_PQR', $2, $3, $4, 'application/pdf', $5, $6, $7)
-      RETURNING *`,
-      [report.id, uploaded.bucket, uploaded.key, fileName, uploaded.size, uploaded.sha256, req.user?.id || null]
-    )
-
-    const savedDoc = docRows[0]
+    const { pdfBuffer, uploaded, savedDoc, fileName } = await createAndArchivePqrPdf(report, req.user?.id || null)
 
     if (req.query.format === 'json') {
       const presignedUrl = await getPresignedDownloadUrl(savedDoc.s3_key, { fileName })
@@ -663,6 +704,12 @@ app.patch(
         tracking_code: updated.tracking_code,
         status: updated.status
       })
+      if (newStatus) {
+        dispatchEmailAsync(updated.id, `STATUS_${updated.status}`, {
+          notes: body.notes || null,
+          actorId: req.user.id
+        })
+      }
 
       res.json(updated)
     } catch (err) {
@@ -690,6 +737,7 @@ app.post('/api/reports/:id/assign-auto', requireAuth, requireRoles('admin', 'sup
 
     if (crewId) {
       broadcastEvent('report:updated', { id: reportId, crew_id: crewId })
+      dispatchEmailAsync(reportId, 'STATUS_ASIGNADO', { actorId: req.user.id })
     }
 
     res.json({ crew_id: crewId })
@@ -784,6 +832,10 @@ app.post(
       if (!result) return res.status(404).json({ error: 'Reporte no encontrado.' })
 
       broadcastEvent('report:updated', { id: reportId, status: result.nextStatus })
+      dispatchEmailAsync(reportId, `STATUS_${result.nextStatus}`, {
+        notes: description,
+        actorId: req.user.id
+      })
       res.status(201).json(result)
     } catch (err) {
       const code = err.statusCode || 500
@@ -840,6 +892,10 @@ app.post('/api/reports/:id/verifications', requireAuth, requireRoles('admin', 's
     if (!verification) return res.status(404).json({ error: 'Reporte no encontrado.' })
 
     broadcastEvent('report:updated', { id: reportId, status: nextStatus })
+    dispatchEmailAsync(reportId, `STATUS_${nextStatus}`, {
+      notes: comments,
+      actorId: req.user.id
+    })
     res.status(201).json({ verification, nextStatus })
   } catch (err) {
     console.error('POST verifications error:', err)
@@ -1191,6 +1247,25 @@ app.get('/api/documents/:id/download', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('GET /api/documents/:id/download error:', err)
     res.status(500).json({ error: 'Error al descargar documento desde S3.' })
+  }
+})
+
+// ─────────────────────────────────────────────
+// BITÁCORA DE NOTIFICACIONES (CORREO SMTP)
+// ─────────────────────────────────────────────
+app.get('/api/notifications', requireAuth, requireRoles('admin', 'supervisor'), async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT n.*, r.tracking_code
+       FROM public.notification_logs n
+       LEFT JOIN public.reports r ON r.id = n.report_id
+       ORDER BY n.created_at DESC
+       LIMIT 50`
+    )
+    res.json(rows)
+  } catch (err) {
+    console.error('GET /api/notifications error:', err)
+    res.status(500).json({ error: 'Error al consultar bitácora de correos.' })
   }
 })
 
